@@ -16,7 +16,7 @@ public class SafeZoneServer extends JFrame {
     public static final int MAP_HEIGHT = 10;
     public static final int NUM_MINES = 10;
     private Vector<Client> clients = new Vector<>();
-    private int numPlayer = 0;
+//    private int numPlayer = 0;
     private boolean[][] mines = new boolean[MAP_WIDTH][MAP_HEIGHT];
     private JTextArea player1Info, player2Info, serverConsole;
     private JPanel mapPanel;
@@ -25,6 +25,7 @@ public class SafeZoneServer extends JFrame {
 
     public SafeZoneServer() {
         prepareGUI();
+        startServer();
     }
 
     private void prepareGUI() {
@@ -127,6 +128,24 @@ public class SafeZoneServer extends JFrame {
         }
     }
 
+    
+    
+    private void startServer() {
+        new Thread(() -> {
+            try (ServerSocket serverSocket = new ServerSocket(IN_PORT)) {
+                while (true) {
+                    Socket socket = serverSocket.accept();
+                    Client client = new Client(socket);
+                    clients.add(client);
+                    appendServerConsole("New client connected"); // wait for new client inputing userName
+                }
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+        }).start();
+    }
+    
+    
     private void appendServerConsole(String text) {
         SwingUtilities.invokeLater(() -> serverConsole.append(text + "\n"));
     }
@@ -135,6 +154,7 @@ public class SafeZoneServer extends JFrame {
         appendServerConsole("Shutting down server...");
         long duration = Duration.between(startTime, Instant.now()).getSeconds();
         appendServerConsole("Server uptime: " + duration + " seconds");
+    	appendServerConsole("Shutting down server...");
         for (Client client : clients) {
             client.closeConnection();
         }
@@ -155,13 +175,17 @@ public class SafeZoneServer extends JFrame {
             this.socket = socket;
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            userName = in.readLine(); // Assuming the first message sent is the user's name
+//            userName = in.readLine(); // Assuming the first message sent is the user's name
             start();
         }
 
         @Override
         public void run() {
             try {
+            	userName = in.readLine(); // Assuming the first message sent is the user's name
+                appendServerConsole("User connected: " + userName);
+                out.println("Welcome " + userName + "!");
+                
                 while (true) {
                     String msg = in.readLine();
                     if (msg != null) {
@@ -179,6 +203,7 @@ public class SafeZoneServer extends JFrame {
 
         private void processMessage(String msg) {
             appendServerConsole(userName + ": " + msg);
+            out.println("Message received");
         }
 
         private void closeConnection() {
@@ -189,8 +214,8 @@ public class SafeZoneServer extends JFrame {
             }
         }
 
-        String getUserName() {
-            return userName;
-        }
+//        String getUserName() {
+//            return userName;
+//        }
     }
 }
