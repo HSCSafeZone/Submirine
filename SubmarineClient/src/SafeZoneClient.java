@@ -20,57 +20,53 @@ class SafeZoneClient {
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
-            System.out.println("Welcome!");
-            out.println(userName);
-            msg = in.readLine(); // wait message
-            System.out.println(msg);
-            msg = in.readLine(); // start message
-            System.out.println(msg);
+            System.out.println("Connected to server.");
+            out.println(userName);  // Send user name to server
 
-            while (score <= num_mine) {
-                msg = guess();
-                if (msg.equalsIgnoreCase("ok")) {
-                    msg = in.readLine();
-                    int result = Integer.parseInt(msg);
-                    if (result >= 0) {
-                        score++;
-                        System.out.println("hit , score = " + score);
-                    } else
-                        System.out.println("miss , score = " + score);
+            // Server welcome message
+            msg = in.readLine(); // Read welcome message from server
+            System.out.println(msg);  // Display welcome message
 
+            while (score < num_mine && (msg = in.readLine()) != null) {
+                System.out.println(msg);  // Display messages from the server
+                if (turn) {
+                    msg = guess();
+                    if ("OK".equalsIgnoreCase(msg)) {
+                        int result = Integer.parseInt(in.readLine());
+                        if (result == 1) {
+                            score++;
+                            System.out.println("Hit! Score: " + score);
+                        } else {
+                            System.out.println("Miss! Score remains: " + score);
+                        }
+                        turn = false;  // Toggle turn after a successful guess
+                    }
+                } else {
+                    System.out.println("Waiting for your turn...");
+                    turn = true;  // Toggle turn
                 }
-
             }
-
-            in.close();
-            out.close();
-            socket.close();
-
+            System.out.println("Game over. Your final score: " + score);
         } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
     public static String guess() throws IOException {
         Scanner scan = new Scanner(System.in);
-
-        System.out.print("\n Enter x coordinate:");
-        int x = scan.nextInt();
-        while ((x < 0) || (x >= width)) {
-            System.out.println(" Invalid x, enter a new x coordinate");
+        int x, y;
+        do {
+            System.out.print("\nEnter x coordinate (0 to " + (width-1) + "): ");
             x = scan.nextInt();
-        }
-        System.out.print(" Enter y coordinate:");
-        int y = scan.nextInt();
-        while ((y < 0) || (y >= width)) {
-            System.out.println(" Invalid y, enter a new y coordinate");
+        } while (x < 0 || x >= width);
+
+        do {
+            System.out.print("Enter y coordinate (0 to " + (width-1) + "): ");
             y = scan.nextInt();
-        }
+        } while (y < 0 || y >= width);
 
-        System.out.println("wait for turn");
         out.println(x + "," + y);
-        String msg = in.readLine();
-
-        return msg;
+        return in.readLine();  // Read server's response (OK or not)
     }
 }
