@@ -22,9 +22,11 @@ public class SafeZoneServer extends JFrame {
     private JPanel mapPanel;
     private JButton startButton, stopButton;
     private Instant startTime;
+    private ServerSocket serverSocket;
 
     public SafeZoneServer() {
         prepareGUI();
+        initializeServer();
     }
 
     private void prepareGUI() {
@@ -33,7 +35,6 @@ public class SafeZoneServer extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Player Panels
         player1Info = new JTextArea(5, 10);
         player1Info.setEditable(false);
         JScrollPane scrollPane1 = new JScrollPane(player1Info);
@@ -44,26 +45,20 @@ public class SafeZoneServer extends JFrame {
         JScrollPane scrollPane2 = new JScrollPane(player2Info);
         scrollPane2.setBorder(BorderFactory.createTitledBorder("Player 2"));
 
-        add(scrollPane1, BorderLayout.WEST);
-        add(scrollPane2, BorderLayout.EAST);
-
-        // Map Panel
         mapPanel = new JPanel(new GridLayout(MAP_WIDTH, MAP_HEIGHT));
         mapPanel.setPreferredSize(new Dimension(400, 400));
-        mapPanel.setBackground(new Color(60, 70, 90)); // Dark blue background
+        mapPanel.setBackground(new Color(60, 70, 90));
         add(mapPanel, BorderLayout.CENTER);
 
-        // Server Console
         serverConsole = new JTextArea(10, 60);
         serverConsole.setEditable(false);
         JScrollPane consoleScrollPane = new JScrollPane(serverConsole);
         consoleScrollPane.setBorder(BorderFactory.createTitledBorder("Server Console"));
-        consoleScrollPane.setBackground(new Color(230, 230, 250)); // Light gray background
+        consoleScrollPane.setBackground(new Color(230, 230, 250));
 
-        // Server Control Panel
         startButton = new JButton("Start Game");
         startButton.addActionListener(e -> initGame());
-        startButton.setBackground(new Color(125, 200, 0)); // Light green
+        startButton.setBackground(new Color(125, 200, 0));
 
         stopButton = new JButton("Stop Server");
         stopButton.addActionListener(e -> {
@@ -73,10 +68,10 @@ public class SafeZoneServer extends JFrame {
                 ex.printStackTrace();
             }
         });
-        stopButton.setBackground(new Color(200, 100, 100)); // Light red
+        stopButton.setBackground(new Color(200, 100, 100));
 
         JPanel controlPanel = new JPanel();
-        controlPanel.setBackground(new Color(200, 220, 240)); // Light blue
+        controlPanel.setBackground(new Color(200, 220, 240));
         controlPanel.add(startButton);
         controlPanel.add(stopButton);
 
@@ -87,6 +82,26 @@ public class SafeZoneServer extends JFrame {
 
         setVisible(true);
         startTime = Instant.now();
+    }
+
+    private void initializeServer() {
+        try {
+            serverSocket = new ServerSocket(IN_PORT);
+            appendServerConsole("Server started on port: " + IN_PORT);
+            while (numPlayer < MAX_PLAYER) {
+                Socket socket = serverSocket.accept();
+                Client client = new Client(socket);
+                clients.add(client);
+                numPlayer++;
+                appendServerConsole("Player connected: " + client.getUserName());
+                if (numPlayer == MAX_PLAYER) {
+                    startButton.setEnabled(true);
+                }
+            }
+        } catch (IOException e) {
+            appendServerConsole("Server Error: " + e.getMessage());
+            System.exit(-1);
+        }
     }
 
     private void initGame() {
@@ -138,6 +153,7 @@ public class SafeZoneServer extends JFrame {
         for (Client client : clients) {
             client.closeConnection();
         }
+        serverSocket.close();
         System.exit(0);
     }
 
@@ -155,20 +171,16 @@ public class SafeZoneServer extends JFrame {
             this.socket = socket;
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            userName = in.readLine(); // Assuming the first message sent is the user's name
+            userName = in.readLine();
             start();
         }
 
         @Override
         public void run() {
             try {
-                while (true) {
-                    String msg = in.readLine();
-                    if (msg != null) {
-                        processMessage(msg);
-                    } else {
-                        break;
-                    }
+                String msg;
+                while ((msg = in.readLine()) != null) {
+                    processMessage(msg);
                 }
             } catch (IOException e) {
                 appendServerConsole(userName + " error: " + e.getMessage());
