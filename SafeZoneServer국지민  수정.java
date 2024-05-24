@@ -33,34 +33,54 @@ public class SafeZoneServer extends JFrame {
         setTitle("Safe Zone Server");
         setSize(800, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(10, 10));  // 패널 간에 간격 추가
 
+        Font infoFont = new Font("SansSerif", Font.BOLD, 14);
+
+        // 플레이어 정보 창 스타일링
         player1Info = new JTextArea(5, 10);
+        player1Info.setFont(infoFont);
         player1Info.setEditable(false);
         JScrollPane scrollPane1 = new JScrollPane(player1Info);
         scrollPane1.setBorder(BorderFactory.createTitledBorder("Player 1"));
+        scrollPane1.setBackground(new Color(220, 220, 250)); // 밝은 회색 배경
 
         player2Info = new JTextArea(5, 10);
+        player2Info.setFont(infoFont);
         player2Info.setEditable(false);
         JScrollPane scrollPane2 = new JScrollPane(player2Info);
         scrollPane2.setBorder(BorderFactory.createTitledBorder("Player 2"));
+        scrollPane2.setBackground(new Color(220, 220, 250)); // 밝은 회색 배경
 
+        // 맵 패널 스타일링
         mapPanel = new JPanel(new GridLayout(MAP_WIDTH, MAP_HEIGHT));
         mapPanel.setPreferredSize(new Dimension(400, 400));
-        mapPanel.setBackground(new Color(60, 70, 90));
-        add(mapPanel, BorderLayout.CENTER);
+        mapPanel.setBackground(new Color(120, 120, 150)); // 변경된 배경색
 
-        serverConsole = new JTextArea(10, 60);
+        // 상단 패널
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(scrollPane1, BorderLayout.WEST);
+        topPanel.add(mapPanel, BorderLayout.CENTER);
+        topPanel.add(scrollPane2, BorderLayout.EAST);
+
+        add(topPanel, BorderLayout.CENTER);
+
+        // 서버 콘솔 크기 및 스타일 조정
+        serverConsole = new JTextArea(8, 60);  // 높이 변경
+        serverConsole.setFont(new Font("Monospaced", Font.PLAIN, 12));
         serverConsole.setEditable(false);
         JScrollPane consoleScrollPane = new JScrollPane(serverConsole);
         consoleScrollPane.setBorder(BorderFactory.createTitledBorder("Server Console"));
-        consoleScrollPane.setBackground(new Color(230, 230, 250));
+        consoleScrollPane.setBackground(new Color(250, 250, 220)); // 구분되는 색상
 
+        // 컨트롤 버튼
         startButton = new JButton("Start Game");
+        startButton.setFont(new Font("Arial", Font.BOLD, 12));
         startButton.addActionListener(e -> initGame());
-        startButton.setBackground(new Color(125, 200, 0));
+        startButton.setBackground(new Color(125, 250, 125));
 
         stopButton = new JButton("Stop Server");
+        stopButton.setFont(new Font("Arial", Font.BOLD, 12));
         stopButton.addActionListener(e -> {
             try {
                 closeServer();
@@ -68,21 +88,24 @@ public class SafeZoneServer extends JFrame {
                 ex.printStackTrace();
             }
         });
-        stopButton.setBackground(new Color(200, 100, 100));
+        stopButton.setBackground(new Color(250, 125, 125));
 
         JPanel controlPanel = new JPanel();
-        controlPanel.setBackground(new Color(200, 220, 240));
+        controlPanel.setBackground(new Color(220, 225, 230));
         controlPanel.add(startButton);
         controlPanel.add(stopButton);
 
+        // 하단 패널에 서버 콘솔과 컨트롤 추가
         JPanel bottomPanel = new JPanel(new BorderLayout());
         bottomPanel.add(consoleScrollPane, BorderLayout.CENTER);
         bottomPanel.add(controlPanel, BorderLayout.SOUTH);
+
         add(bottomPanel, BorderLayout.SOUTH);
 
         setVisible(true);
         startTime = Instant.now();
     }
+
 
     private void initializeServer() {
         try {
