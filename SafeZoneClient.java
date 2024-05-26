@@ -1,17 +1,76 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
-class SafeZoneClient {
+class SafeZoneClient extends JFrame {
     static int inPort = 9999;
     static String address = "172.30.1.78";
     static PrintWriter out;
     static BufferedReader in;
     static String userName;
     static int num_mine = 10;
-    static int width = 9;
+    static int width = 10;    
 
-    public static void main(String[] args) {
+    public SafeZoneClient() {
+    	connectGUI();
+    }
+    
+    private void connectGUI() {
+    	JFrame c_frame = new JFrame("Connecting...");
+        c_frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        c_frame.setSize(300, 150);
+        c_frame.setResizable(false);
+        
+        JPanel consolePanel = new JPanel();
+        consolePanel.setLayout(new BoxLayout(consolePanel, BoxLayout.Y_AXIS));
+        consolePanel.setBorder(BorderFactory.createEmptyBorder(30, 10, 10, 10));
+        
+        JLabel c_prompt = new JLabel("Enter your user name (letters & numbers only)");
+        
+        JPanel promptPanel = new JPanel(new FlowLayout(FlowLayout.LEFT)); // 왼쪽 정렬을 위한 새 패널
+        promptPanel.add(c_prompt);
+        
+        JTextField c_textField = new JTextField();
+        c_textField.setMaximumSize(new Dimension(Integer.MAX_VALUE, c_textField.getPreferredSize().height));
+        
+        JButton c_button = new JButton("Connect");
+        
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
+        buttonPanel.add(Box.createHorizontalGlue()); // 버튼 앞에 수평 glue 추가
+        buttonPanel.add(c_button);
+        buttonPanel.add(Box.createHorizontalGlue()); // 버튼 뒤에 수평 glue 추가
+
+        c_button.addActionListener(e -> {
+            userName = c_textField.getText();
+            if (userName.matches("[a-zA-Z0-9]+")) {
+                c_frame.dispose();
+                connectToServer();	
+            } else {
+                JOptionPane.showMessageDialog(c_frame, "Invalid username. Please use letters and numbers only.");
+            }
+        });
+        
+        consolePanel.add(promptPanel);
+        consolePanel.add(c_textField);
+        consolePanel.add(buttonPanel);
+
+        c_frame.getContentPane().add(consolePanel);
+        c_frame.setVisible(true);
+    }
+    
+    private void prepareGUI() {	//도현
+        setTitle("Safe Zone Client");
+        setSize(400, 300);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setVisible(true);
+    } 
+    
+    private void connectToServer() {  
         int score = 0;
         String msg;
         boolean turn = true;
@@ -19,15 +78,14 @@ class SafeZoneClient {
         try (Socket socket = new Socket(address, inPort)) {
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+           
+            out.println(userName); //사용자 이름 전송
             
-            System.out.println("Enter your user name(letters & numbers only)...");
-            Scanner scan = new Scanner(System.in);
-            userName = scan.nextLine();
-            out.println(userName);
+            prepareGUI(); //도현
+            
             msg = in.readLine(); // "Welcome userName!"
             System.out.println(msg);
-//            msg = in.readLine(); // start message
-//            System.out.println(msg);
+
             
             while (score <= num_mine) {
             	//서버에서 "ok"를 내보내면 "enter x coordinate" 뜨게 하기 
@@ -52,8 +110,11 @@ class SafeZoneClient {
             e.printStackTrace();
         }
     }
+    
+    
+        
 
-    public static String guess() throws IOException {
+    private static String guess() throws IOException {
         Scanner scan = new Scanner(System.in);
         int x = -1;
         int y = -1;
@@ -89,4 +150,7 @@ class SafeZoneClient {
 
         return msg;
     }
-}
+    public static void main(String[] args) {
+    	SwingUtilities.invokeLater(SafeZoneClient::new);
+    }
+    }
