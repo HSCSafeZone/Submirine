@@ -1,121 +1,103 @@
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.*;
 import java.io.*;
 import java.net.Socket;
-import java.util.InputMismatchException;
-import java.util.Scanner;
 
 public class SafeZoneClient extends JFrame {
-    static int inPort = 9999;
-    static String address = "localhost";
-    static PrintWriter out;
-    static BufferedReader in;
-    static String userName;
-    static int num_mine = 10;
-    static int width = 9;
+    private static final String SERVER_IP = "localhost";
+    private static final int SERVER_PORT = 9999;
+    private static final int MAP_SIZE = 10;
+    private JButton[][] buttons = new JButton[MAP_SIZE][MAP_SIZE];
+    private boolean myTurn = false;
+    private JLabel statusLabel = new JLabel("연결 대기중...");
+    private BufferedReader in;
+    private PrintWriter out;
+    private String userName;
 
     public SafeZoneClient() {
-        connectGUI();
+        createAndShowGUI();
+        connectToServer();
     }
 
-    private void connectGUI() {
-        JFrame c_frame = new JFrame("서버에 연결 중...");
-        c_frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        c_frame.setSize(300, 150);
-        c_frame.setLocationRelativeTo(null);
-        c_frame.setResizable(false);
+    private void createAndShowGUI() {
+        setTitle("Safe Zone: 지뢰 찾기 게임");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(500, 550);
+        setLayout(new BorderLayout());
 
-        JPanel consolePanel = new JPanel();
-        consolePanel.setLayout(new BoxLayout(consolePanel, BoxLayout.Y_AXIS));
-        consolePanel.setBorder(BorderFactory.createEmptyBorder(30, 10, 10, 10));
+        JPanel boardPanel = new JPanel();
+        boardPanel.setLayout(new GridLayout(MAP_SIZE, MAP_SIZE));
 
-        JLabel c_prompt = new JLabel("사용자 이름을 입력하세요 (영문자 및 숫자만 허용)");
-
-        JPanel promptPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        promptPanel.add(c_prompt);
-
-        JTextField c_textField = new JTextField();
-        c_textField.setPreferredSize(new Dimension(250, 30));
-
-        JButton c_button = new JButton("연결");
-
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
-        buttonPanel.add(Box.createHorizontalGlue());
-        buttonPanel.add(c_button);
-        buttonPanel.add(Box.createHorizontalGlue());
-
-        c_button.addActionListener(e -> {
-            userName = c_textField.getText();
-            if (userName.matches("[a-zA-Z0-9]+")) {
-                c_frame.dispose();
-                connectToServer();
-            } else {
-                JOptionPane.showMessageDialog(c_frame, "잘못된 사용자 이름입니다. 영문자와 숫자만 사용하세요.");
+        for (int i = 0; i < MAP_SIZE; i++) {
+            for (int j = 0; j < MAP_SIZE; j++) {
+                JButton button = new JButton();
+                button.setPreferredSize(new Dimension(50, 50));
+                int finalI = i;
+                int finalJ = j;
+                button.addActionListener(e -> {
+                    if (myTurn && button.isEnabled()) {
+                        sendMove(finalI, finalJ);
+                    }
+                });
+                buttons[i][j] = button;
+                boardPanel.add(button);
             }
-        });
+        }
 
-        consolePanel.add(promptPanel);
-        consolePanel.add(c_textField);
-        consolePanel.add(buttonPanel);
+        add(boardPanel, BorderLayout.CENTER);
+        add(statusLabel, BorderLayout.SOUTH);
 
-        c_frame.getContentPane().add(consolePanel);
-        c_frame.setVisible(true);
+        setVisible(true);
     }
 
     private void connectToServer() {
-        try (Socket socket = new Socket(address, inPort)) {
-            out = new PrintWriter(socket.getOutputStream(), true);
+        try {
+            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            out = new PrintWriter(socket.getOutputStream(), true);
 
-            out.println(userName);
+            userName = JOptionPane.showInputDialog(this, "Enter your name:");
+            out.println(userName);  // Send user name to server
 
-            while (true) {
-                String msg = in.readLine();
-                if (msg == null) {
-                    System.out.println("서버와의 연결이 끊어졌습니다. 안녕히 가세요!");
+            // Read messages from the server and process them
+            String line;
+            while ((line = in.readLine()) != null) {
+                if (line.startsWith("TURN")) {
+                    myTurn = line.substring(5).equals(userName);
+                    statusLabel.setText(myTurn ? "당신의 차례입니다." : "상대 플레이어의 차례입니다.");
+                } else if (line.startsWith("UPDATE")) {
+                    updateBoard(line.substring(7));
+                } else if (line.startsWith("GAME_STARTED")) {
+                    statusLabel.setText("게임이 시작되었습니다!");
+                } else if (line.startsWith("WINNER")) {
+                    JOptionPane.showMessageDialog(this, line.substring(7));
                     break;
-                }
-                System.out.println(msg);
-
-                if (msg.startsWith("당신의 차례")) {
-                    msg = guess();
-                    if (msg.equals("성공")) {
-                        System.out.println("성공!");
-                    } else {
-                        System.out.println("실패!");
-                    }
+                } else if (line.startsWith("MESSAGE")) {
+                    JOptionPane.showMessageDialog(this, line.substring(8));
                 }
             }
         } catch (IOException e) {
-            System.err.println("오류: " + e.getMessage());
             e.printStackTrace();
-        } finally {
-            closeConnection();
+            JOptionPane.showMessageDialog(this, "서버 연결 실패: " + e.getMessage());
         }
     }
 
-    private static String guess() throws IOException {
-        Scanner scan = new Scanner(System.in);
-        int x = -1;
-        int y = -1;
-        
-        // 입력 유효성 검사 루프 생략
-        
-        System.out.println("차례를 기다리는 중");
-        out.println(x + "," + y);
-        String msg = in.readLine();
-
-        return msg;
+    private void sendMove(int x, int y) {
+        out.println("MOVE " + x + " " + y);
     }
 
-    private void closeConnection() {
-        try {
-            if (in != null) in.close();
-            if (out != null) out.close();
-        } catch (IOException e) {
-            System.err.println("스트림 닫기 오류: " + e.getMessage());
-        }
+    private void updateBoard(String data) {
+        SwingUtilities.invokeLater(() -> {
+            String[] rows = data.split(";");
+            for (int i = 0; i < MAP_SIZE; i++) {
+                String[] cells = rows[i].split(",");
+                for (int j = 0; j < MAP_SIZE; j++) {
+                    buttons[i][j].setText(cells[j]);
+                    buttons[i][j].setEnabled(cells[j].equals(""));
+                }
+            }
+        });
     }
 
     public static void main(String[] args) {
