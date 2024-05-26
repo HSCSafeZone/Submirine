@@ -135,7 +135,7 @@ public class SafeZoneServer extends JFrame {
                     Client client = new Client(socket);
                     clients.add(client);
                     pool.execute(client);
-                    updateServerConsole(socket.getInetAddress() + "에서 플레이어가 연결되었습니다.");
+                    updateServerConsole(client.getPlayer().getName() + "님이 연결되었습니다.");
                 } catch (IOException e) {
                     if (serverSocket.isClosed()) {
                         System.out.println("서버 소켓이 닫혔습니다.");
@@ -149,6 +149,7 @@ public class SafeZoneServer extends JFrame {
             e.printStackTrace();
         }
     }
+
 
     private void updateServerConsole(String message) {
         SwingUtilities.invokeLater(() -> {
@@ -235,8 +236,11 @@ public class SafeZoneServer extends JFrame {
                 while ((msg = in.readLine()) != null) {
                     if ("SHUTDOWN".equals(msg)) {
                         break;  // 종료 메시지를 받으면 루프 종료
+                    } else if ("GET_INFO".equals(msg)) {
+                        sendPlayerInfo();  // 플레이어 정보 전송
+                    } else {
+                        processMessage(msg);  // 메시지 처리
                     }
-                    processMessage(msg);  // 메시지 처리
                 }
             } catch (IOException e) {
                 if (!socket.isClosed()) {
@@ -245,6 +249,10 @@ public class SafeZoneServer extends JFrame {
             } finally {
                 closeConnection();  // 연결 종료
             }
+        }
+
+        private void sendPlayerInfo() {
+            out.println(player.getInfo());  // 플레이어 정보 전송
         }
 
         private void processMessage(String msg) {
@@ -278,10 +286,11 @@ public class SafeZoneServer extends JFrame {
         }
     }
 
+
     class Player {
         private String name;
         private int wins = 0;
-        private int mistakes = 0;
+        private int losses = 0;
 
         public Player(String name) {
             this.name = name;
@@ -295,14 +304,15 @@ public class SafeZoneServer extends JFrame {
             wins++;  // 승리 횟수 증가
         }
 
-        public void addMistake() {
-            mistakes++;  // 실수 횟수 증가
+        public void addLoss() {
+            losses++;  // 패배 횟수 증가
         }
 
         public String getInfo() {
-            return String.format("%s - 승리: %d, 실수: %d", name, wins, mistakes);
+            return String.format("%s - 승리: %d, 패배: %d", name, wins, losses);
         }
     }
+
 }
 
         }
