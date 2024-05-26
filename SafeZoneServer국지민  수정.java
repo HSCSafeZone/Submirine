@@ -1,15 +1,14 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Vector;
 import java.util.Random;
-import java.time.Duration;
-import java.time.Instant;
+import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.time.Duration;
+import java.time.Instant;
 
 public class SafeZoneServer extends JFrame {
     public static final int IN_PORT = 9999;
@@ -28,8 +27,14 @@ public class SafeZoneServer extends JFrame {
     private ServerSocket serverSocket;
 
     public SafeZoneServer() {
-        prepareGUI();
-        initializeServer();
+        try {
+            serverSocket = new ServerSocket(IN_PORT);
+            prepareGUI();
+            new Thread(this::initializeServer).start(); // 서버 초기화 스레드를 별도로 실행
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(null, "서버가 이미 실행 중입니다.", "경고", JOptionPane.WARNING_MESSAGE);
+            System.exit(0); // 이미 서버가 실행 중이면 프로그램 종료
+        }
     }
 
     private void prepareGUI() {
@@ -39,29 +44,31 @@ public class SafeZoneServer extends JFrame {
         setLayout(new BorderLayout(10, 10));
 
         // 컬러 테마
-        Color backgroundColor = new Color(240, 240, 240);  // 밝은 배경색
-        Color panelColor = new Color(200, 200, 200);       // 중간 밝기의 패널 색상
-        Color textColor = new Color(0, 0, 0);              // 어두운 텍스트 색상
-        Color buttonColor = new Color(70, 130, 180);       // 파란 버튼 색상
+        Color backgroundColor = new Color(240, 240, 240); // 밝은 배경색
+        Color panelColor = new Color(200, 200, 200); // 중간 밝기의 패널 색상
+        Color textColor = new Color(0, 0, 0); // 어두운 텍스트 색상
+        Color buttonColor = new Color(70, 130, 180); // 파란 버튼 색상
 
         // 전체 배경색 설정
         getContentPane().setBackground(backgroundColor);
 
         Font infoFont = new Font("SansSerif", Font.BOLD, 14);
 
-        player1Info = new JTextArea("플레이어 1 정보");
+        player1Info = new JTextArea("플레이어 1");
         player1Info.setFont(infoFont);
-        player1Info.setEditable(false);
-        player1Info.setBackground(panelColor);
         player1Info.setForeground(textColor);
+        player1Info.setPreferredSize(new Dimension(150, 100)); // 크기 조절
+        player1Info.setLineWrap(true);
+        player1Info.setWrapStyleWord(true);
         JScrollPane scrollPane1 = new JScrollPane(player1Info);
         scrollPane1.setBorder(BorderFactory.createTitledBorder(null, "플레이어 1", 0, 0, infoFont, textColor));
 
-        player2Info = new JTextArea("플레이어 2 정보");
+        player2Info = new JTextArea("플레이어 2");
         player2Info.setFont(infoFont);
-        player2Info.setEditable(false);
-        player2Info.setBackground(panelColor);
         player2Info.setForeground(textColor);
+        player2Info.setPreferredSize(new Dimension(150, 100)); // 크기 조절
+        player2Info.setLineWrap(true);
+        player2Info.setWrapStyleWord(true);
         JScrollPane scrollPane2 = new JScrollPane(player2Info);
         scrollPane2.setBorder(BorderFactory.createTitledBorder(null, "플레이어 2", 0, 0, infoFont, textColor));
 
@@ -90,15 +97,15 @@ public class SafeZoneServer extends JFrame {
         JScrollPane consoleScrollPane = new JScrollPane(serverConsole);
         consoleScrollPane.setBorder(BorderFactory.createTitledBorder(null, "서버 콘솔", 0, 0, infoFont, textColor));
 
-        JButton startButton = new JButton("게임 시작");
+        startButton = new JButton("게임 시작");
         startButton.setBackground(buttonColor);
-        startButton.setForeground(Color.WHITE);  // 버튼 텍스트 색상
+        startButton.setForeground(Color.WHITE); // 버튼 텍스트 색상
         startButton.setFocusPainted(false);
-        startButton.addActionListener(e -> initGame());
+        startButton.addActionListener(e -> checkPlayersAndStartGame());
 
-        JButton stopButton = new JButton("서버 중지");
+        stopButton = new JButton("서버 중지");
         stopButton.setBackground(buttonColor);
-        stopButton.setForeground(Color.WHITE);  // 버튼 텍스트 색상
+        stopButton.setForeground(Color.WHITE); // 버튼 텍스트 색상
         stopButton.setFocusPainted(false);
         stopButton.addActionListener(e -> {
             try {
@@ -123,33 +130,35 @@ public class SafeZoneServer extends JFrame {
         setVisible(true);
     }
 
-
-    private void initializeServer() {
+    private synchronized void initializeServer() {
+        statusLabel.setText("서버가 포트 " + IN_PORT + "에서 실행 중입니다.");
+        startTime = Instant.now(); // 서버 시작 시간 초기화
         try {
-            serverSocket = new ServerSocket(IN_PORT);
-            statusLabel.setText("서버가 포트 " + IN_PORT + "에서 실행 중입니다.");
-            startTime = Instant.now();  // 서버 시작 시간 초기화
-            while (!serverSocket.isClosed()) {  // 서버 소켓이 닫히지 않은 동안 실행
+            while (!serverSocket.isClosed()) { // 서버 소켓이 닫히지 않은 동안 실행
                 try {
                     Socket socket = serverSocket.accept();
                     Client client = new Client(socket);
-                    clients.add(client);
+                    synchronized (clients) {
+                        clients.add(client);
+                    }
                     pool.execute(client);
                     updateServerConsole(client.getPlayer().getName() + "님이 연결되었습니다.");
                 } catch (IOException e) {
                     if (serverSocket.isClosed()) {
                         System.out.println("서버 소켓이 닫혔습니다.");
                     } else {
-                        throw e;
+                        throw new RuntimeException("서버 오류: " + e.getMessage(), e);
                     }
                 }
             }
-        } catch (IOException e) {
-            System.err.println("서버 오류: " + e.getMessage());
-            e.printStackTrace();
+        } finally {
+            try {
+                closeServer();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
-
 
     private void updateServerConsole(String message) {
         SwingUtilities.invokeLater(() -> {
@@ -157,18 +166,30 @@ public class SafeZoneServer extends JFrame {
         });
     }
 
-    private void closeServer() throws IOException {
+    private synchronized void closeServer() throws IOException {
         System.out.println("서버를 종료합니다...");
-        if (startTime != null) {  // startTime이 null이 아닌지 확인
+        if (startTime != null) { // startTime이 null이 아닌지 확인
             long duration = Duration.between(startTime, Instant.now()).getSeconds();
             System.out.println("서버 가동 시간: " + duration + "초");
         }
         for (Client client : clients) {
-            client.sendShutdownMessage();  // 클라이언트에게 종료 메시지 보내기
+            client.sendShutdownMessage(); // 클라이언트에게 종료 메시지 보내기
             client.closeConnection();
         }
-        serverSocket.close();
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            serverSocket.close();
+        }
         System.exit(0);
+    }
+
+    private void checkPlayersAndStartGame() {
+        synchronized (clients) {
+            if (clients.size() < MAX_PLAYER) {
+                JOptionPane.showMessageDialog(this, "Not enough players connected. At least 2 players are required.");
+                return;
+            }
+        }
+        initGame();
     }
 
     private void initGame() {
@@ -179,11 +200,18 @@ public class SafeZoneServer extends JFrame {
             do {
                 x = rand.nextInt(MAP_WIDTH);
                 y = rand.nextInt(MAP_HEIGHT);
-            } while (mines[x][y]);  // 이미 지뢰가 있는 위치를 피함
-            mines[x][y] = true;  // 지뢰 배치
+            } while (mines[x][y]); // 이미 지뢰가 있는 위치를 피함
+            mines[x][y] = true; // 지뢰 배치
         }
-        updateMap();  // 맵 업데이트
-        statusLabel.setText("게임이 시작되었습니다!");  // 상태 레이블 업데이트
+        updateMap();
+        statusLabel.setText("The game has started!");
+        notifyClientsGameStarted(); // 클라이언트에게 게임 시작 알림
+    }
+
+    private void notifyClientsGameStarted() {
+        for (Client client : clients) {
+            client.sendGameStartMessage();
+        }
     }
 
     private void clearMap() {
@@ -195,7 +223,7 @@ public class SafeZoneServer extends JFrame {
                 mines[i][j] = false;
                 JLabel label = new JLabel("", SwingConstants.CENTER);
                 label.setBorder(BorderFactory.createLineBorder(Color.GRAY));
-                mapPanel.add(label);  // 맵을 새로 그림
+                mapPanel.add(label); // 맵을 새로 그림
             }
         }
     }
@@ -206,7 +234,7 @@ public class SafeZoneServer extends JFrame {
             int x = i / MAP_WIDTH;
             int y = i % MAP_WIDTH;
             JLabel label = (JLabel) components[i];
-            label.setText(mines[x][y] ? "X" : "");  // 지뢰 위치에 "X" 표시
+            label.setText(mines[x][y] ? "X" : ""); // 지뢰 위치에 "X" 표시
         }
     }
 
@@ -224,9 +252,9 @@ public class SafeZoneServer extends JFrame {
             this.socket = socket;
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            String playerName = in.readLine();  // 플레이어 이름 읽기
+            String playerName = in.readLine(); // 플레이어 이름 읽기
             player = new Player(playerName);
-            start();  // 스레드 시작
+            start(); // 스레드 시작
         }
 
         @Override
@@ -235,11 +263,11 @@ public class SafeZoneServer extends JFrame {
                 String msg;
                 while ((msg = in.readLine()) != null) {
                     if ("SHUTDOWN".equals(msg)) {
-                        break;  // 종료 메시지를 받으면 루프 종료
+                        break; // 종료 메시지를 받으면 루프 종료
                     } else if ("GET_INFO".equals(msg)) {
-                        sendPlayerInfo();  // 플레이어 정보 전송
+                        sendPlayerInfo(); // 플레이어 정보 전송
                     } else {
-                        processMessage(msg);  // 메시지 처리
+                        processMessage(msg); // 메시지 처리
                     }
                 }
             } catch (IOException e) {
@@ -247,12 +275,12 @@ public class SafeZoneServer extends JFrame {
                     System.err.println(player.getName() + " 오류: " + e.getMessage());
                 }
             } finally {
-                closeConnection();  // 연결 종료
+                closeConnection(); // 연결 종료
             }
         }
 
-        private void sendPlayerInfo() {
-            out.println(player.getInfo());  // 플레이어 정보 전송
+        public void sendPlayerInfo() {
+            out.println(player.getInfo()); // 플레이어 정보 전송
         }
 
         private void processMessage(String msg) {
@@ -262,20 +290,36 @@ public class SafeZoneServer extends JFrame {
             SwingUtilities.invokeLater(() -> {
                 serverConsole.append(consoleMsg + "\n");
                 if (player.getName().equals(player1Info.getText().split(" ")[0])) {
-                    player1Info.setText(player.getInfo());  // 플레이어 1 정보 업데이트
+                    player1Info.setText(player.getInfo()); // 플레이어 1 정보 업데이트
                 } else if (player.getName().equals(player2Info.getText().split(" ")[0])) {
-                    player2Info.setText(player.getInfo());  // 플레이어 2 정보 업데이트
+                    player2Info.setText(player.getInfo()); // 플레이어 2 정보 업데이트
                 }
             });
         }
 
-        void sendShutdownMessage() {
-            out.println("SHUTDOWN");
+        public void sendShutdownMessage() {
+            try {
+                if (out != null) {
+                    out.println("SHUTDOWN"); // 클라이언트에 종료 명령 전송
+                }
+            } catch (Exception e) {
+                System.err.println("Shutdown 메시지 전송 중 오류 발생: " + e.getMessage());
+            }
         }
 
-        void closeConnection() {
+        public void sendGameStartMessage() {
             try {
-                socket.close();  // 소켓 닫기
+                if (out != null) {
+                    out.println("GAME_STARTED"); // 클라이언트에 게임 시작 명령 전송
+                }
+            } catch (Exception e) {
+                System.err.println("Game start 메시지 전송 중 오류 발생: " + e.getMessage());
+            }
+        }
+
+        private void closeConnection() {
+            try {
+                socket.close(); // 소켓 닫기
             } catch (IOException e) {
                 System.err.println("연결 종료 오류: " + e.getMessage());
             }
@@ -285,7 +329,6 @@ public class SafeZoneServer extends JFrame {
             return player;
         }
     }
-
 
     class Player {
         private String name;
@@ -301,20 +344,15 @@ public class SafeZoneServer extends JFrame {
         }
 
         public void addWin() {
-            wins++;  // 승리 횟수 증가
+            wins++; // 승리 횟수 증가
         }
 
         public void addLoss() {
-            losses++;  // 패배 횟수 증가
+            losses++; // 패배 횟수 증가
         }
 
         public String getInfo() {
             return String.format("%s - 승리: %d, 패배: %d", name, wins, losses);
-        }
-    }
-
-}
-
         }
     }
 }
