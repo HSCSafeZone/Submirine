@@ -22,6 +22,7 @@ public class SafeZoneClient extends JFrame {
         JFrame c_frame = new JFrame("서버에 연결 중...");
         c_frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         c_frame.setSize(300, 150);
+        c_frame.setLocationRelativeTo(null);
         c_frame.setResizable(false);
 
         JPanel consolePanel = new JPanel();
