@@ -165,43 +165,35 @@ public class SafeZoneServer extends JFrame {
         }).start();
     }
 
-    private void closeServer()throws IOException {
-        // 백그라운드 스레드에서 서버 종료 로직 실행
-        new Thread(() -> {
-            try {
-                System.out.println("서버를 종료합니다...");
-                if (startTime != null) {
-                    long duration = Duration.between(startTime, Instant.now()).getSeconds();
-                    System.out.println("서버 가동 시간: " + duration + "초");
-                }
+    private void closeServer() throws IOException {
+        if (isClosing) return;
+        isClosing = true;
 
-                // 모든 클라이언트에게 종료 메시지 전송 및 연결 종료
-                for (Client client : clients) {
-                    client.sendShutdownMessage();
-                    client.interrupt();  // 스레드 인터럽트
-                    client.closeConnection();
-                }
+        System.out.println("서버를 종료합니다...");
+        if (startTime != null) {
+            long duration = Duration.between(startTime, Instant.now()).getSeconds();
+            System.out.println("서버 가동 시간: " + duration + "초");
+        }
 
-                // 서버 소켓 닫기
-                if (serverSocket != null && !serverSocket.isClosed()) {
-                    serverSocket.close();
-                }
+        // 모든 클라이언트에게 종료 메시지 전송 및 연결 종료
+        for (Client client : clients) {
+            client.sendShutdownMessage();
+            client.interrupt();  // 스레드 인터럽트
+            client.closeConnection();
+        }
 
-                // ExecutorService 종료
-                pool.shutdownNow();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        // 서버 소켓 닫기
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            serverSocket.close();
+        }
 
-            // GUI 스레드에서 안전하게 종료
-            SwingUtilities.invokeLater(() -> {
-                System.exit(0);
-            });
-        }).start();
+        // ExecutorService 종료
+        pool.shutdownNow();
 
-        // 메인 GUI 반응이 빨리 이루어지도록 하기 위해 System.exit(0) 호출 제거
+        SwingUtilities.invokeLater(() -> {
+            System.exit(0);
+        });
     }
-
 
     private void checkPlayersAndStartGame() {
         synchronized (clients) {
@@ -241,16 +233,21 @@ public class SafeZoneServer extends JFrame {
     private void assignFirstTurn() {
         Random rand = new Random();
         currentPlayerIndex = rand.nextInt(MAX_PLAYER);
+        sendTurnMessageToCurrentPlayer();
+    }
+
+    private void sendTurnMessageToCurrentPlayer() {
         if (clients.size() > currentPlayerIndex) {
             clients.get(currentPlayerIndex).sendTurnMessage();
         } else {
-            // 예외 처리: 유효한 클라이언트가 없는 경우
             System.err.println("유효한 플레이어가 없습니다.");
         }
     }
 
-
-
+    private void switchTurn() {
+        currentPlayerIndex = (currentPlayerIndex + 1) % MAX_PLAYER;
+        sendTurnMessageToCurrentPlayer();
+    }
 
     private void clearMap() {
         mapPanel.removeAll();
@@ -285,6 +282,7 @@ public class SafeZoneServer extends JFrame {
         private PrintWriter out;
         private BufferedReader in;
         private Player player;
+        private int score = 0;
 
         Client(Socket socket) throws IOException {
             this.socket = socket;
@@ -302,6 +300,8 @@ public class SafeZoneServer extends JFrame {
                 while ((msg = in.readLine()) != null) {
                     if ("SHUTDOWN".equals(msg)) {
                         break;
+                    } else if (msg.startsWith("MOVE")) {
+                        processMoveMessage(msg);
                     } else if ("GET_INFO".equals(msg)) {
                         sendPlayerInfo();
                     } else {
@@ -315,6 +315,21 @@ public class SafeZoneServer extends JFrame {
             } finally {
                 closeConnection();
             }
+        }
+
+        private void processMoveMessage(String msg) {
+            String[] parts = msg.split(" ");
+            int x = Integer.parseInt(parts[1]);
+            int y = Integer.parseInt(parts[2]);
+            if (mines[x][y]) {
+                score++;
+                out.println("MOVE_OK " + score);
+            } else {
+                out.println("MOVE_FAIL " + score);
+            }
+            mines[x][y] = false; // 지뢰 제거
+            updateMap();
+            switchTurn();
         }
 
         public void sendPlayerInfo() {
@@ -377,7 +392,6 @@ public class SafeZoneServer extends JFrame {
             return player;
         }
     }
-
 
     class Player {
         private String name;
