@@ -1,156 +1,142 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.*;
-import java.net.*;
-import java.util.*;
+import java.net.Socket;
+import java.util.InputMismatchException;
+import java.util.Scanner;
 
-class SafeZoneClient extends JFrame {
+public class SafeZoneClient extends JFrame {
     static int inPort = 9999;
-    static String address = "172.30.1.78";
+    static String address = "localhost";
     static PrintWriter out;
     static BufferedReader in;
     static String userName;
     static int num_mine = 10;
-    static int width = 10;    
+    static int width = 9;
 
     public SafeZoneClient() {
-    	connectGUI();
+        connectGUI();
     }
-    
+
     private void connectGUI() {
-    	JFrame c_frame = new JFrame("Connecting...");
+        JFrame c_frame = new JFrame("서버에 연결 중...");
         c_frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        c_frame.setSize(300, 150);
+        c_frame.setSize(300, 160);
+        c_frame.setLocationRelativeTo(null);
         c_frame.setResizable(false);
-        
+
         JPanel consolePanel = new JPanel();
         consolePanel.setLayout(new BoxLayout(consolePanel, BoxLayout.Y_AXIS));
-        consolePanel.setBorder(BorderFactory.createEmptyBorder(30, 10, 10, 10));
+        consolePanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
         
-        JLabel c_prompt = new JLabel("Enter your user name (letters & numbers only)");
+        JPanel addressPrompt = new JPanel();
+        addressPrompt.setLayout(new BoxLayout(addressPrompt, BoxLayout.Y_AXIS));
+        JLabel l_address = new JLabel("서버 주소");
+        JTextField t_address = new JTextField(15);
+        addressPrompt.add(l_address);
+        addressPrompt.add(t_address);
         
-        JPanel promptPanel = new JPanel(new FlowLayout(FlowLayout.LEFT)); // 왼쪽 정렬을 위한 새 패널
-        promptPanel.add(c_prompt);
-        
-        JTextField c_textField = new JTextField();
-        c_textField.setMaximumSize(new Dimension(Integer.MAX_VALUE, c_textField.getPreferredSize().height));
-        
-        JButton c_button = new JButton("Connect");
-        
+        JPanel userNamePrompt = new JPanel();
+        userNamePrompt.setLayout(new BoxLayout(userNamePrompt, BoxLayout.Y_AXIS));
+        JLabel l_userName = new JLabel("사용자 이름(영문자 및 숫자만 허용)");
+        JTextField t_userName = new JTextField(10);
+        userNamePrompt.add(l_userName);
+        userNamePrompt.add(t_userName);
+          
+//        a JLabel iconLabel = new JLabel(mineIcon);
+//        promptPanel.add(iconLabel);
+
+//        Color backgroundColor = new Color(238,238,238);
+        JButton c_button = new JButton("연결");
+
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
-        buttonPanel.add(Box.createHorizontalGlue()); // 버튼 앞에 수평 glue 추가
+        buttonPanel.add(Box.createHorizontalGlue());
         buttonPanel.add(c_button);
-        buttonPanel.add(Box.createHorizontalGlue()); // 버튼 뒤에 수평 glue 추가
+        buttonPanel.add(Box.createHorizontalGlue());
 
         c_button.addActionListener(e -> {
-            userName = c_textField.getText();
+            userName = t_userName.getText();
+            address = t_address.getText();
             if (userName.matches("[a-zA-Z0-9]+")) {
-                c_frame.dispose();
-                connectToServer();	
+                if (address.matches("^[0-9.]+$")) {
+                    c_frame.dispose();
+                    connectToServer();
+                } else {
+                    JOptionPane.showMessageDialog(c_frame, "잘못된 주소입니다. 숫자와 점(.)만 사용하세요.");
+                }
             } else {
-                JOptionPane.showMessageDialog(c_frame, "Invalid username. Please use letters and numbers only.");
+                JOptionPane.showMessageDialog(c_frame, "잘못된 사용자 이름입니다. 영문자와 숫자만 사용하세요.");
             }
         });
-        
-        consolePanel.add(promptPanel);
-        consolePanel.add(c_textField);
+//        consolePanel.add(iconLabel);
+        consolePanel.add(addressPrompt);
+        consolePanel.add(Box.createVerticalStrut(5));
+        consolePanel.add(userNamePrompt);
+        consolePanel.add(Box.createVerticalStrut(10));
         consolePanel.add(buttonPanel);
 
+//        c_frame.add(iconLabel);
         c_frame.getContentPane().add(consolePanel);
         c_frame.setVisible(true);
     }
-    
-    private void prepareGUI() {	//도현
-        setTitle("Safe Zone Client");
-        setSize(400, 300);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setVisible(true);
-    } 
-    
-    private void connectToServer() {  
-        int score = 0;
-        String msg;
-        boolean turn = true;
 
+    private void connectToServer() {
         try (Socket socket = new Socket(address, inPort)) {
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-           
-            out.println(userName); //사용자 이름 전송
-            
-            prepareGUI(); //도현
-            
-            msg = in.readLine(); // "Welcome userName!"
-            System.out.println(msg);
 
-            
-            while (score <= num_mine) {
-            	//서버에서 "ok"를 내보내면 "enter x coordinate" 뜨게 하기 
-                msg = guess();
-                if (msg.equalsIgnoreCase("ok")) {
-                    msg = in.readLine();
-                    int result = Integer.parseInt(msg);
-                    if (result >= 0) {
-                        score++;
-                        System.out.println("hit , score = " + score);
-                    } else
-                        System.out.println("miss , score = " + score);
+            out.println(userName);
+
+            while (true) {
+                String msg = in.readLine();
+                if (msg == null) {
+                    System.out.println("서버와의 연결이 끊어졌습니다. 안녕히 가세요!");
+                    break;
                 }
+                System.out.println(msg);
 
+                if (msg.startsWith("당신의 차례")) {
+                    msg = guess();
+                    if (msg.equals("성공")) {
+                        System.out.println("성공!");
+                    } else {
+                        System.out.println("실패!");
+                    }
+                }
             }
-
-            in.close();
-            out.close();
-            socket.close();
-
-        } catch (Exception e) {
+        } catch (IOException e) {
+            System.err.println("오류: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            closeConnection();
         }
     }
-    
-    
-        
 
     private static String guess() throws IOException {
         Scanner scan = new Scanner(System.in);
         int x = -1;
         int y = -1;
         
-        while ((x < 0) || (x >= width)) {
-        	try {
-		        System.out.print("\n Enter x coordinate: ");
-		        x = scan.nextInt();
-		        if (x < 0 || x >= width) {
-		        	System.out.println("Invalid x, enter a new x coordinate");
-		        }
-        	} catch (InputMismatchException e) {
-	            System.out.println("Invalid input, please enter an integer.");
-	            scan.next(); // Clear the invalid input
-        	}
-        }
-        while ((y < 0) || (y >= width)) {
-        	try {
-		        System.out.print(" Enter y coordinate: ");
-		        y = scan.nextInt();
-		        if (y < 0 || y >= width) {
-		        	System.out.println("Invalid y, enter a new y coordinate");
-		        }
-        	} catch (InputMismatchException e) {
-	            System.out.println("Invalid input, please enter an integer.");
-	            scan.next(); // Clear the invalid input
-        	}
-        }
-
-        System.out.println("wait for your turn");
+        // 입력 유효성 검사 루프 생략
+        
+        System.out.println("차례를 기다리는 중");
         out.println(x + "," + y);
         String msg = in.readLine();
 
         return msg;
     }
+
+    private void closeConnection() {
+        try {
+            if (in != null) in.close();
+            if (out != null) out.close();
+        } catch (IOException e) {
+            System.err.println("스트림 닫기 오류: " + e.getMessage());
+        }
+    }
+
     public static void main(String[] args) {
-    	SwingUtilities.invokeLater(SafeZoneClient::new);
+        SwingUtilities.invokeLater(SafeZoneClient::new);
     }
-    }
+}
