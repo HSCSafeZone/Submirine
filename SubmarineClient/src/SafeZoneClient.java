@@ -3,16 +3,16 @@ import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.io.*;
 import java.net.Socket;
+import java.util.Timer;
+import java.util.TimerTask;
 
 public class SafeZoneClient extends JFrame {
     private static final int SERVER_PORT = 9999;
     private static final int MAP_SIZE = 10;
     private JButton[][] buttons = new JButton[MAP_SIZE][MAP_SIZE];
-    private boolean myTurn = false;
+    private boolean isMyTurn = false; // 클라이언트의 턴 여부를 나타내는 변수
     private JLabel statusLabel = new JLabel("연결 대기중...");
     private JTextArea statusTextArea = new JTextArea(5, 20); // 상태 메시지를 위한 JTextArea 추가
     private BufferedReader in;
@@ -30,7 +30,6 @@ public class SafeZoneClient extends JFrame {
     public JButton[] buttonsFlat;
     public int UIwidth = 50;  // 가로 크기 조절 변수
     public int UIheight = 100;  // 세로 크기 조절 변수
-    public boolean isMyTurn = true;
 
     public SafeZoneClient() {
         connectGUI(); // Start with the connection GUI
@@ -119,7 +118,7 @@ public class SafeZoneClient extends JFrame {
         setupMenu.add(First_option);
         First_option.addActionListener(e -> {
             setupButton.setText(First_option.getText());
-            switchTurn();
+            switchTurn(isMyTurn);
         });
 
         JMenuItem Second_option = new JMenuItem("설정2");
@@ -156,7 +155,7 @@ public class SafeZoneClient extends JFrame {
         statusPanel.setBackground(Color.LIGHT_GRAY);
         statusLabel = new JLabel("내 턴", SwingConstants.LEFT); // 초기 상태 "내 턴"으로 설정
         statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
-        statusPanel.add(statusLabel, BorderLayout.CENTER); // 상태 라벨을 중앙에 배치
+        statusPanel.add(statusLabel, BorderLayout.CENTER);
 
         // JTextArea 추가
         statusTextArea.setEditable(false);
@@ -199,23 +198,21 @@ public class SafeZoneClient extends JFrame {
     class MyActionListener1 implements ActionListener {
         public void actionPerformed(ActionEvent e) {
             JButton b = (JButton) e.getSource();
-            b.setText("❌");
-            b.setEnabled(false);
-            b.setBackground(Color.ORANGE);
-
-            // 스위치 턴 기능 추가
-            switchTurn();
+            int index = Integer.parseInt(b.getText());  // 버튼의 텍스트를 정수로 변환
+            int x = index / width;
+            int y = index % width;
+            sendMove(x, y);  // 서버로 이동 전송
         }
     }
 
-    private void switchTurn() {
-        isMyTurn = !isMyTurn;
+    private void switchTurn(boolean turn) {
+        isMyTurn = turn;
         String turnText = isMyTurn ? "내 턴" : "턴 기다리는 중";
         statusLabel.setText(turnText);
 
         // 내 턴이면 버튼 활성화, 아니면 비활성화
         for (JButton button : buttonsFlat) {
-            button.setEnabled(isMyTurn);
+            button.setEnabled(isMyTurn && button.getText().equals(""));
         }
     }
 
@@ -253,15 +250,22 @@ public class SafeZoneClient extends JFrame {
 
     private void processServerMessage(String line) {
         SwingUtilities.invokeLater(() -> {
-            if (line.startsWith("TURN")) {
-                myTurn = line.substring(5).equals(userName);
-                statusLabel.setText(myTurn ? "당신의 차례입니다." : "상대 플레이어의 차례입니다.");
-            } else if (line.startsWith("UPDATE")) {
-                updateBoard(line.substring(7));
+            if (line.startsWith("YOUR_TURN")) {
+                switchTurn(true);
+            } else if (line.startsWith("MOVE_OK")) {
+                String[] parts = line.split(" ");
+                int score = Integer.parseInt(parts[1]);
+                statusTextArea.append("지뢰를 찾았습니다! 점수: " + score + "\n");
+                switchTurn(false);
+            } else if (line.startsWith("MOVE_FAIL")) {
+                String[] parts = line.split(" ");
+                int score = Integer.parseInt(parts[1]);
+                statusTextArea.append("지뢰가 아닙니다. 점수: " + score + "\n");
+                switchTurn(false);
             } else if (line.startsWith("GAME_STARTED")) {
                 statusLabel.setText("게임이 시작되었습니다!");
             } else if (line.startsWith("WINNER")) {
-                JOptionPane.showMessageDialog(null, line.substring(7));
+                JOptionPane.showMessageDialog(null, "게임 종료. 승자: " + line.substring(7));
             } else if (line.startsWith("MESSAGE")) {
                 statusTextArea.append(line.substring(8) + "\n");
             }
