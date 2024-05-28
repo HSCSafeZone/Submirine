@@ -284,13 +284,14 @@ public class SafeZoneServer extends JFrame {
         private Player player;
         private int score = 0;
 
+        // 클라이언트 생성자
         Client(Socket socket) throws IOException {
             this.socket = socket;
             out = new PrintWriter(socket.getOutputStream(), true);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            String playerName = in.readLine();
+            String playerName = in.readLine(); // 클라이언트로부터 사용자 이름을 받습니다.
             player = new Player(playerName);
-            start();
+            start();  // 스레드를 시작합니다.
         }
 
         @Override
@@ -299,13 +300,13 @@ public class SafeZoneServer extends JFrame {
                 String msg;
                 while ((msg = in.readLine()) != null) {
                     if ("SHUTDOWN".equals(msg)) {
-                        break;
+                        break;  // SHUTDOWN 메시지를 받으면 연결을 종료합니다.
                     } else if (msg.startsWith("MOVE")) {
-                        processMoveMessage(msg);
+                        processMoveMessage(msg);  // MOVE 메시지 처리
                     } else if ("GET_INFO".equals(msg)) {
-                        sendPlayerInfo();
+                        sendPlayerInfo();  // 플레이어 정보 요청 처리
                     } else {
-                        processMessage(msg);
+                        processMessage(msg);  // 기타 메시지 처리
                     }
                 }
             } catch (IOException e) {
@@ -313,7 +314,7 @@ public class SafeZoneServer extends JFrame {
                     System.err.println(player.getName() + " 오류: " + e.getMessage());
                 }
             } finally {
-                closeConnection();
+                closeConnection();  // 연결 종료
             }
         }
 
@@ -327,33 +328,27 @@ public class SafeZoneServer extends JFrame {
             } else {
                 out.println("MOVE_FAIL " + score);
             }
-            mines[x][y] = false; // 지뢰 제거
+            mines[x][y] = false; // 지뢰를 찾았으면 해당 위치를 false로 설정
             updateMap();
-            switchTurn();
+            switchTurn();  // 턴 전환
         }
 
         public void sendPlayerInfo() {
-            out.println(player.getInfo());
+            out.println(player.getInfo());  // 플레이어 정보 전송
         }
 
         private void processMessage(String msg) {
             String consoleMsg = player.getName() + ": " + msg;
             System.out.println(consoleMsg);
-
             SwingUtilities.invokeLater(() -> {
                 serverConsole.append(consoleMsg + "\n");
-                if (player.getName().equals(player1Info.getText().split(" ")[0])) {
-                    player1Info.setText(player.getInfo());
-                } else if (player.getName().equals(player2Info.getText().split(" ")[0])) {
-                    player2Info.setText(player.getInfo());
-                }
             });
         }
 
         public void sendShutdownMessage() {
             try {
                 if (out != null) {
-                    out.println("SHUTDOWN");
+                    out.println("SHUTDOWN");  // SHUTDOWN 메시지 전송
                 }
             } catch (Exception e) {
                 System.err.println("Shutdown 메시지 전송 중 오류 발생: " + e.getMessage());
@@ -363,7 +358,7 @@ public class SafeZoneServer extends JFrame {
         public void sendGameStartMessage() {
             try {
                 if (out != null) {
-                    out.println("GAME_STARTED");
+                    out.println("GAME_STARTED");  // 게임 시작 메시지 전송
                 }
             } catch (Exception e) {
                 System.err.println("Game start 메시지 전송 중 오류 발생: " + e.getMessage());
@@ -373,7 +368,7 @@ public class SafeZoneServer extends JFrame {
         public void sendTurnMessage() {
             try {
                 if (out != null) {
-                    out.println("YOUR_TURN");
+                    out.println("YOUR_TURN");  // 턴 메시지 전송
                 }
             } catch (Exception e) {
                 System.err.println("Turn 메시지 전송 중 오류 발생: " + e.getMessage());
@@ -382,7 +377,9 @@ public class SafeZoneServer extends JFrame {
 
         private void closeConnection() {
             try {
-                socket.close();
+                if (socket != null) {
+                    socket.close();  // 소켓 연결 종료
+                }
             } catch (IOException e) {
                 System.err.println("연결 종료 오류: " + e.getMessage());
             }
@@ -392,6 +389,7 @@ public class SafeZoneServer extends JFrame {
             return player;
         }
     }
+
 
     class Player {
         private String name;
