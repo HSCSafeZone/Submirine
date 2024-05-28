@@ -33,8 +33,8 @@ public class SafeZoneClient extends JFrame {
 
     // 전체 실행 부
     public SafeZoneClient() {
-//    	connectGUI();
-    	gameMapGUI();
+    	connectGUI();
+//    	gameMapGUI();
     }
 
     // 연결 GUI
