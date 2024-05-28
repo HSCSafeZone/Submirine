@@ -173,47 +173,53 @@ public class SafeZoneClient extends JFrame {
     }
 
     private void createMapPanel() {
-        JPanel mapPanel = new JPanel(new GridLayout(width, width));
-        buttonsFlat = new JButton[width * width];
-        for (int i = 0; i < width * width; i++) {
-            buttonsFlat[i] = new JButton("" + i);
-            buttonsFlat[i].addActionListener(new MyActionListener1());
-            mapPanel.add(buttonsFlat[i]);
+        JPanel mapPanel = new JPanel(new GridLayout(MAP_SIZE, MAP_SIZE));
+        buttons = new JButton[MAP_SIZE][MAP_SIZE];  // 2차원 배열 초기화
+        for (int i = 0; i < MAP_SIZE; i++) {
+            for (int j = 0; j < MAP_SIZE; j++) {
+                JButton button = new JButton();
+                button.setActionCommand(i + "," + j); // 버튼에 좌표를 ActionCommand로 설정
+                button.addActionListener(new MyActionListener1());
+                buttons[i][j] = button;
+                mapPanel.add(button);
+            }
         }
 
         JPanel wrappedPanel = new JPanel(new BorderLayout());
         wrappedPanel.add(mapPanel, BorderLayout.CENTER);
-
         Border border = BorderFactory.createLineBorder(new Color(240, 240, 240), 50);
         wrappedPanel.setBorder(border);
 
         gamePanel.removeAll();
         gamePanel.setLayout(new GridLayout(1, 1));  // 단일 맵을 배치하기 위해 GridLayout 사용
         gamePanel.add(wrappedPanel);
-
         gamePanel.revalidate();
         gamePanel.repaint();
     }
 
+
     class MyActionListener1 implements ActionListener {
         public void actionPerformed(ActionEvent e) {
+            if (!isMyTurn) return; // 내 턴이 아니면 클릭 무시
+
             JButton b = (JButton) e.getSource();
-            int index = Integer.parseInt(b.getText());  // 버튼의 텍스트를 정수로 변환
-            int x = index / width;
-            int y = index % width;
+            String[] coordinates = b.getActionCommand().split(",");
+            int x = Integer.parseInt(coordinates[0]);
+            int y = Integer.parseInt(coordinates[1]);
             sendMove(x, y);  // 서버로 이동 전송
         }
     }
 
-    private void switchTurn(boolean turn) {
-        isMyTurn = turn;
-        String turnText = isMyTurn ? "내 턴" : "턴 기다리는 중";
-        statusLabel.setText(turnText);
-
-        // 내 턴이면 버튼 활성화, 아니면 비활성화
-        for (JButton button : buttonsFlat) {
-            button.setEnabled(isMyTurn && button.getText().equals(""));
-        }
+    private void switchTurn(boolean isMyTurn) {
+        this.isMyTurn = isMyTurn; // 현재 턴 상태 업데이트
+        SwingUtilities.invokeLater(() -> {
+            for (int i = 0; i < MAP_SIZE; i++) {
+                for (int j = 0; j < MAP_SIZE; j++) {
+                    buttons[i][j].setEnabled(isMyTurn);
+                }
+            }
+            statusLabel.setText(isMyTurn ? "내 턴" : "상대 턴");
+        });
     }
 
     private void startTimer() {
@@ -252,24 +258,23 @@ public class SafeZoneClient extends JFrame {
         SwingUtilities.invokeLater(() -> {
             if (line.startsWith("YOUR_TURN")) {
                 switchTurn(true);
-            } else if (line.startsWith("MOVE_OK")) {
-                String[] parts = line.split(" ");
-                int score = Integer.parseInt(parts[1]);
-                statusTextArea.append("지뢰를 찾았습니다! 점수: " + score + "\n");
-                switchTurn(false);
-            } else if (line.startsWith("MOVE_FAIL")) {
-                String[] parts = line.split(" ");
-                int score = Integer.parseInt(parts[1]);
-                statusTextArea.append("지뢰가 아닙니다. 점수: " + score + "\n");
-                switchTurn(false);
+            } else if (line.startsWith("MOVE_OK") || line.startsWith("MOVE_FAIL")) {
+                handleMoveResponse(line);
             } else if (line.startsWith("GAME_STARTED")) {
                 statusLabel.setText("게임이 시작되었습니다!");
-            } else if (line.startsWith("WINNER")) {
-                JOptionPane.showMessageDialog(null, "게임 종료. 승자: " + line.substring(7));
-            } else if (line.startsWith("MESSAGE")) {
-                statusTextArea.append(line.substring(8) + "\n");
+                switchTurn(false);
+            } else if (line.startsWith("GAME_OVER")) {
+                JOptionPane.showMessageDialog(null, "모든 지뢰가 찾아졌습니다. 게임 종료!");
+                System.exit(0);
             }
         });
+    }
+
+    private void handleMoveResponse(String line) {
+        String[] parts = line.split(" ");
+        int score = Integer.parseInt(parts[1]);
+        statusTextArea.append(parts[0].equals("MOVE_OK") ? "지뢰를 찾았습니다! 점수: " + score + "\n" : "지뢰가 아닙니다. 점수: " + score + "\n");
+        switchTurn(false); // 턴을 상대방으로 넘김
     }
 
     private void sendMove(int x, int y) {
