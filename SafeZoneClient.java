@@ -375,27 +375,29 @@ public class SafeZoneClient extends JFrame {
     private void handleMoveResponse(String line) {
         String[] parts = line.split(" ");
         int score = Integer.parseInt(parts[1]);
+        int remainingMines = Integer.parseInt(parts[2]);
         if (parts[0].equals("MOVE_OK")) {
             String OText = ("지뢰를 찾았습니다! 점수: " + score + "\n");
             sendMessage(OText);
+            num_mine = remainingMines;
+            mineLabel.setText("MINES: " + num_mine);
             // 변수 업데이트
             num_try++;
             tryLabel.setText("TRY: " + num_try);
             num_point++;
             pointLabel.setText(num_point + "점");
-            
         } else {
-        	String XText = ("지뢰가 아닙니다. 점수: " + score + "\n");
+            String XText = ("지뢰가 아닙니다. 점수: " + score + "\n");
             sendMessage(XText);
+            num_mine = remainingMines;
+            mineLabel.setText("MINES: " + num_mine);
             // 변수 업데이트
             num_try++;
             tryLabel.setText("TRY: " + num_try);
-            
         }
         switchTurn(false);
     }
     
-    // 서버 메시지 일괄 관리 (기능 아래에 계속 추가)
     private void handleServerMessage(String line) {
         SwingUtilities.invokeLater(() -> {
             if (line.startsWith("YOUR_TURN")) {
@@ -403,11 +405,17 @@ public class SafeZoneClient extends JFrame {
             } else if (line.startsWith("MOVE_OK") || line.startsWith("MOVE_FAIL")) {
                 handleMoveResponse(line);
             } else if (line.startsWith("MATCH_FOUND")) {
-                handleMatchFound(); // 매칭 완료 메시지 처리
+                handleMatchFound();
             } else if (line.startsWith("GAME_STARTED")) {
-                handleGameStarted(); // 게임 시작 메시지 처리
+                handleGameStarted();
+            } else if (line.startsWith("GAME_OVER")) {
+                handleGameOver(line);
+            } else if (line.startsWith("RESTART_GAME")) {
+                handleRestartGame();
             } else if (line.startsWith("START_TIMER")) {
                 startTimer();
+            } else if (line.startsWith("상대의 선택을 기다리고 있습니다.")) {
+                showWaitingDialog();
             } else if (line.startsWith("CHAT:")) {
                 // 채팅 메시지 처리
             } else if (line.startsWith("ROUND+")) {
@@ -416,12 +424,19 @@ public class SafeZoneClient extends JFrame {
             } else if (line.startsWith("MINE-")) {
                 num_mine--;
                 mineLabel.setText("MINE: " + num_mine);
-            } else if (line.startsWith("GAME_OVER")) {
-                JOptionPane.showMessageDialog(null, "모든 지뢰가 찾아졌습니다. 게임 종료!");
+            } else if (line.startsWith("UPDATE_MINES")) {
+                int remainingMines = Integer.parseInt(line.split(" ")[1]);
+                num_mine = remainingMines;
+                mineLabel.setText("MINES: " + num_mine);
+            } else if (line.startsWith("GAME_OVER_FINAL")) {
+                hideWaitingDialog();
+                JOptionPane.showMessageDialog(this, "상대가 접속을 종료하였습니다.");
+                JOptionPane.showMessageDialog(this, "플레이 해주셔서 감사합니다.");
                 System.exit(0);
             }
         });
     }
+
 
     private void handleMatchFound() {
         JOptionPane.showMessageDialog(this, "매칭이 완료되었습니다. 게임이 곧 시작됩니다.");
@@ -440,8 +455,58 @@ public class SafeZoneClient extends JFrame {
         sendMessage(startText);
         switchTurn(false);
     }
+    
+    private void handleGameOver(String line) {
+        String[] parts = line.split(" ");
+        String message;
+        if (parts.length >= 2) {
+            String winnerName = parts[1];
+            message = "게임 종료! 승자: " + winnerName + "\n다시 하시겠습니까?";
+        } else {
+            message = "게임 종료!\n다시 하시겠습니까?";
+        }
+        int response = JOptionPane.showConfirmDialog(this, message, "게임 종료", JOptionPane.YES_NO_OPTION);
+        if (response == JOptionPane.YES_OPTION) {
+            out.println("RESTART");
+            showWaitingDialog();
+        } else {
+            out.println("NO_RESTART");
+            showWaitingDialog();
+        }
+    }
 
+    private JDialog waitingDialog;
 
+    private void showWaitingDialog() {
+        if (waitingDialog == null) {
+            waitingDialog = new JDialog(this, "상대의 선택을 기다리고 있습니다.", true);
+            waitingDialog.setSize(300, 150);
+            waitingDialog.setLocationRelativeTo(this);
+        }
+        SwingUtilities.invokeLater(() -> waitingDialog.setVisible(true));
+    }
+
+    private void hideWaitingDialog() {
+        if (waitingDialog != null) {
+            waitingDialog.setVisible(false);
+        }
+    }
+
+    private void handleRestartGame() {
+        hideWaitingDialog();
+        creatMapButtons();
+        startTimer();
+        num_round++;
+        roundLabel.setText(num_round + "ROUND");
+        num_mine = 10;
+        mineLabel.setText("MINE: " + num_mine);
+        String startText = "게임이 다시 시작되었습니다!";
+        sendMessage(startText);
+        startText = "맵의 지뢰는 총 10개 입니다.";
+        sendMessage(startText);
+        switchTurn(false);
+    }
+    
     // 타이머 가동
     public void startTimer() {
         startTimer = System.currentTimeMillis();
