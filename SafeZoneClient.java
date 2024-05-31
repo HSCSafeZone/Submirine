@@ -408,7 +408,7 @@ public class SafeZoneClient extends JFrame {
                 	startTimer();
                 	num_round++;
                 	roundLabel.setText(num_round + "ROUND");
-                	num_mine+=10;
+                	num_mine = 10;
                 	mineLabel.setText("MINE: " + num_mine);
                 });
                 String startText = ("게임이 시작되었습니다!");
