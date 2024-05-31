@@ -289,7 +289,7 @@ public class SafeZoneServer extends JFrame {
         private BufferedReader in;
         private Player player;
         private int score = 0;
-        private boolean wantsToRestart = false;
+        private Boolean wantsToRestart = null; // 재시작 여부를 나타내는 Boolean 객체
 
         // 클라이언트 생성자
         Client(Socket socket) throws IOException {
@@ -332,19 +332,20 @@ public class SafeZoneServer extends JFrame {
 
         private void processMessage(String msg) {
             if (msg.startsWith("MOVE")) {
-                processMoveMessage(msg);  // MOVE 메시지를 별도의 메소드로 처리
+                processMoveMessage(msg);
             } else if (msg.equals("RESTART")) {
                 this.wantsToRestart = true;
-                checkAllPlayersRestartConsent();  // 모든 플레이어가 재시작을 원하는지 확인
+                out.println("상대의 선택을 기다리고 있습니다.");
+                checkAllPlayersRestartConsent();
             } else if (msg.equals("NO_RESTART")) {
                 this.wantsToRestart = false;
-                notifyClientsGameOver();  // 게임 종료 알림
+                checkAllPlayersRestartConsent();
             } else if ("GET_INFO".equals(msg)) {
-                sendPlayerInfo();  // 플레이어 정보 요청 처리
+                sendPlayerInfo();
             } else if ("SHUTDOWN".equals(msg)) {
-                closeConnection();  // 연결 종료 처리
+                closeConnection();
             } else {
-                handleOtherMessages(msg);  // 그 외 메시지 처리
+                handleOtherMessages(msg);
             }
         }
 
@@ -354,18 +355,41 @@ public class SafeZoneServer extends JFrame {
             int y = Integer.parseInt(parts[2]);
             if (mines[x][y]) {
                 score++;
-                out.println("MOVE_OK " + score);
+                mines[x][y] = false; // 지뢰 찾았으니 false로 설정
+                int remainingMines = getRemainingMines();
+                out.println("MOVE_OK " + score + " " + remainingMines);
+                broadcastRemainingMines(remainingMines);
                 // 게임이 끝났는지 확인
                 if (checkGameOver()) {
                     sendGameOver();
                 }
             } else {
-                out.println("MOVE_FAIL " + score);
+                int remainingMines = getRemainingMines();
+                out.println("MOVE_FAIL " + score + " " + remainingMines);
+                broadcastRemainingMines(remainingMines);
             }
-            mines[x][y] = false; // 지뢰 찾았으니 false로 설정
             updateMap();
             switchTurn();  // 턴 전환
         }
+
+        private void broadcastRemainingMines(int remainingMines) {
+            for (Client client : clients) {
+                client.out.println("UPDATE_MINES " + remainingMines);
+            }
+        }
+
+        private int getRemainingMines() {
+            int remainingMines = 0;
+            for (int i = 0; i < MAP_WIDTH; i++) {
+                for (int j = 0; j < MAP_HEIGHT; j++) {
+                    if (mines[i][j]) {
+                        remainingMines++;
+                    }
+                }
+            }
+            return remainingMines;
+        }
+
 
         private void handleOtherMessages(String msg) {
             String consoleMsg = player.getName() + ": " + msg;
@@ -377,27 +401,49 @@ public class SafeZoneServer extends JFrame {
         
         private void checkAllPlayersRestartConsent() {
             synchronized (clients) {
+                boolean allResponded = true;
                 for (Client client : clients) {
-                    if (!client.wantsToRestart) return;  // 모든 플레이어의 동의가 필요
+                    if (client.wantsToRestart == null) {
+                        allResponded = false;
+                        break;
+                    }
                 }
-                restartGame();
+
+                if (allResponded) {
+                    boolean allWantRestart = true;
+                    for (Client client : clients) {
+                        if (!client.wantsToRestart) {
+                            allWantRestart = false;
+                            break;
+                        }
+                    }
+
+                    if (allWantRestart) {
+                        restartGame();
+                    } else {
+                        notifyClientsGameOver();
+                    }
+                }
             }
         }
-        
+
         private void restartGame() {
             for (Client client : clients) {
-                client.wantsToRestart = false;  // 다음 라운드를 위해 재설정
+                client.wantsToRestart = null; // 재설정
                 client.out.println("RESTART_GAME");
             }
-            initGame();  // 게임 초기화
+            initGame(); // 게임 초기화
         }
         
         private void notifyClientsGameOver() {
             for (Client client : clients) {
                 client.out.println("GAME_OVER_FINAL");
+                client.out.println("상대가 접속을 종료하였습니다.");
+                client.out.println("플레이 해주셔서 감사합니다.");
             }
+            closeServerAsync(); // 서버 종료를 비동기로 실행
         }
-        
+
         private boolean checkGameOver() {
             int totalMinesFound = 0;
             for (Client client : clients) {
@@ -414,6 +460,9 @@ public class SafeZoneServer extends JFrame {
                     maxScore = client.score;
                     winnerName = client.player.getName();
                 }
+            }
+            if (winnerName.isEmpty()) {
+                winnerName = "No Winner";
             }
             for (Client client : clients) {
                 client.out.println("GAME_OVER " + winnerName);
