@@ -20,6 +20,7 @@ public class SafeZoneClient extends JFrame {
     
     public int size=10,  num_mine=0,  num_try=0,  num_round=0,  num_point=0;
     public Container cont;
+    JFrame matchingFrame;
     public JPanel mapPanel, topPanel, gamePanel, statusPanel;
     public JLabel roundLabel, mineLabel, timerLabel, tryLabel, pointLabel;    
     public JPopupMenu setupMenu;
@@ -134,7 +135,7 @@ public class SafeZoneClient extends JFrame {
 
     // 매칭 대기화면 GUI(현재는 자동화. 추후에 서버랑 연결보고 수정 필요)
     private void matchingGUI() {
-        JFrame matchingFrame = new JFrame("매칭 대기");
+        matchingFrame = new JFrame("매칭 대기");
         matchingFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         matchingFrame.setSize(300, 160);
         matchingFrame.setLocationRelativeTo(null);
@@ -149,10 +150,9 @@ public class SafeZoneClient extends JFrame {
 
         new Thread(new Runnable() {
             private int dotCount = 1;
-            private int elapsedTime = 0;
             public void run() {
                 try {
-                    while (elapsedTime < 3000) { 
+                    while (true) { 
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
                                 matchingLabel.setText("매칭 중" + ".".repeat(dotCount));
@@ -161,20 +161,7 @@ public class SafeZoneClient extends JFrame {
                         dotCount++;
                         if (dotCount > 3) dotCount = 1;
                         Thread.sleep(500); 
-                        elapsedTime += 500;
                     }
-                    SwingUtilities.invokeLater(new Runnable() {
-                        public void run() {
-                            matchingLabel.setText("매칭 성공");
-                        }
-                    });
-                    Thread.sleep(3000);
-                    SwingUtilities.invokeLater(new Runnable() {
-                        public void run() {
-                        	matchingFrame.dispose();
-                        	gameGUI();
-                        }
-                    });
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -186,7 +173,7 @@ public class SafeZoneClient extends JFrame {
     private void gameGUI() {
     	setTitle("지뢰찾기");
     	setSize(600, 800);
-        setLocation(400, 20);
+        setLocationRelativeTo(null);
     	setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);  	
     	cont = getContentPane();
     	cont.setLayout(new BorderLayout());
@@ -469,7 +456,11 @@ public class SafeZoneClient extends JFrame {
 
 
     private void handleMatchFound() {
+    	if(matchingFrame != null) {
+    		matchingFrame.dispose();
+    	}
         JOptionPane.showMessageDialog(this, "매칭이 완료되었습니다. 게임이 곧 시작됩니다.");
+        gameGUI();
     }
 
     private void handleGameStarted() {
