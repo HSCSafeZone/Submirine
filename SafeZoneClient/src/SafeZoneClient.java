@@ -596,7 +596,7 @@ public class SafeZoneClient extends JFrame {
  // 채팅창 
     private void sendChatToServer(String chat) {
         if (!chat.trim().isEmpty()) {
-            out.println(chat);
+            out.println("CHAT:" + userName + ": " + chat);
             chatField.setText(""); // 채팅 입력 필드 비우기
         }
     }
