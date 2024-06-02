@@ -13,28 +13,28 @@ public class SafeZoneClient extends JFrame {
     private static final int SERVER_PORT = 9999;
     private static final int MAP_SIZE = 10;
     private JButton[][] buttons = new JButton[MAP_SIZE][MAP_SIZE];
-    private boolean isMyTurn = false;
     private BufferedReader in;
     private PrintWriter out;
     private String userName;
     private String serverAddress = "localhost";
+    private boolean isMyTurn = false;
     
-    public int size=10,  num_mine=0,  num_try=0,  num_round=0,  num_point=0;
-    public Container cont;
-    JFrame matchingFrame;
+    public int size=10,  num_mine=0,  num_try=0,  num_point=0;
     public JPanel mapPanel, topPanel, gamePanel, statusPanel;
-    public JLabel roundLabel, mineLabel, timerLabel, tryLabel, scoreLabel;    
+    public JLabel mineLabel, timerLabel, tryLabel, scoreLabel;    
+    public int successfulDetections = 0, totalDetections = 0, failedDetections = 0, totalPlayTime = 0;
+    public JTextField mineField, tryField, scoreField, chatField;
     public JPopupMenu setupMenu;
     public JButton[] mapButtons;
-    public Timer timer;
     public TimerTask timerTask;
+    public JTextArea textArea;
+    public JFrame matchingFrame;
+    public Container cont;
+    public Timer timer;
     public long startTimer;
-    public JTextArea playerStatus;
-    public JTextField mineField, tryField, scoreField, chatField;
     
     public SafeZoneClient() {
         connectGUI();
-//    	gameGUI();
     }
 
     private void connectGUI() {
@@ -183,9 +183,6 @@ public class SafeZoneClient extends JFrame {
         topPanel.setLayout(new GridLayout(2, 1));
         topPanel.setBackground(new Color(141, 153, 174));
 
-        roundLabel = new JLabel(num_round + "ROUND", SwingConstants.RIGHT);
-        roundLabel.setFont(roundLabel.getFont().deriveFont(Font.BOLD));
-
         mineLabel = new JLabel("", SwingConstants.RIGHT);
         Image img1 = new ImageIcon(this.getClass().getResource("/mine.png")).getImage();
         mineLabel.setIcon(new ImageIcon(img1));
@@ -216,27 +213,16 @@ public class SafeZoneClient extends JFrame {
         JMenuItem Second_option = new JMenuItem("항복하기");
         setupMenu.add(Second_option);
         Second_option.addActionListener(e -> {
-        	int response = JOptionPane.showConfirmDialog(null, "항복하고 다시 시작하시겠습니까?\n(패배 처리됨)", "다시 시작", JOptionPane.YES_NO_OPTION);
+        	int response = JOptionPane.showConfirmDialog(null, "항복하고 게임을 종료하시겠습니까? (패배 처리됨)", "항복하기", JOptionPane.YES_NO_OPTION);
         	if (response == JOptionPane.YES_OPTION) {
-        		showWaitingDialog();
-        		handleRestartGame();
+				handleGameEnd();
+				// 수정
         	}
-        });
-
-        JMenuItem Third_option = new JMenuItem("게임종료");
-        setupMenu.add(Third_option);
-        Third_option.addActionListener(e -> {
-            int response = JOptionPane.showConfirmDialog(null, "게임을 종료하시겠습니까?\n(패배 처리됨)", "게임 종료", JOptionPane.YES_NO_OPTION);
-            if (response == JOptionPane.YES_OPTION) {
-            	getExtendedState();
-            }
         });
 
         JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JPanel centerPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-
-        leftPanel.add(roundLabel);
 
         centerPanel.add(mineLabel);
         centerPanel.add(mineField);
@@ -260,7 +246,7 @@ public class SafeZoneClient extends JFrame {
 
         createMapPanel();
 
-        createBottomPanel();
+        createChatPanel();
 
         setVisible(true);
     }
@@ -314,16 +300,18 @@ public class SafeZoneClient extends JFrame {
     }
 
     // 게임GUI 하단(채팅창)
-    private void createBottomPanel() {
-        JPanel bottomPanel = new JPanel(new BorderLayout());
+    private void createChatPanel() {
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+        JPanel chatPanel = new JPanel(new BorderLayout());
 
         // 채팅창
-        playerStatus = new JTextArea(8, 60);
-        playerStatus.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        playerStatus.setEditable(false);
-        playerStatus.setBackground(new Color(200, 200, 200));
-        playerStatus.setForeground(new Color(0, 0, 0));
-        JScrollPane statusScrollPane = new JScrollPane(playerStatus);
+        textArea = new JTextArea(8, 60);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        textArea.setEditable(false);
+        textArea.setBackground(new Color(200, 200, 200));
+        textArea.setForeground(new Color(0, 0, 0));
+        JScrollPane statusScrollPane = new JScrollPane(textArea);
         statusScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
 
         // 채팅 입력란
@@ -333,36 +321,37 @@ public class SafeZoneClient extends JFrame {
         chatField.setForeground(Color.BLACK);
         chatField.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                String message = chatField.getText();
-                sendMessage(message);
+                String chat = chatField.getText();
+                sendChatToServer(chat);
             }
         });
 
-        bottomPanel.add(statusScrollPane, BorderLayout.NORTH);
-        bottomPanel.add(chatField, BorderLayout.SOUTH);
+        chatPanel.add(statusScrollPane, BorderLayout.NORTH);
+        chatPanel.add(chatField, BorderLayout.SOUTH);
+
+        bottomPanel.add(chatPanel);
+        bottomPanel.add(Box.createVerticalStrut(5));
 
         cont.add(bottomPanel, BorderLayout.SOUTH);
     }
     
     public void resultGUI() {
-    	int wins = 0, totalGames = 0, successfulDetections = 0, totalDetections = 0, losses = 0, failedDetections = 0, totalPlayTime = 0;
         JFrame resultFrame = new JFrame("통계");
-        resultFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        resultFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         resultFrame.setSize(300, 160);
         resultFrame.setLocationRelativeTo(null);
         resultFrame.setResizable(false);
         resultFrame.setLayout(new GridLayout(0, 1)); // 라벨을 수직으로 배치
+        
+        totalDetections = num_try;
+        successfulDetections = num_point;
+        failedDetections = num_try - num_point;
 
-        // 승률 및 탐지 확률 계산
-        double winRate = (double) wins / totalGames * 100;
+        // 탐지 확률 계산
         double detectionRate = (double) successfulDetections / totalDetections * 100;
         DecimalFormat df = new DecimalFormat("0.00"); // 소수점 2자리 형식
 
         // 라벨 생성
-        JLabel totalGamesLabel = new JLabel("게임 수: " + totalGames);
-        JLabel winLabel = new JLabel("승리: " + wins);
-        JLabel lossLabel = new JLabel("패배: " + losses);
-        JLabel winRateLabel = new JLabel("승률: " + df.format(winRate) + "%");
         JLabel totalDetectionsLabel = new JLabel("탐지 시도: " + totalDetections);
         JLabel successfulDetectionsLabel = new JLabel("탐지 성공: " + successfulDetections);
         JLabel failedDetectionsLabel = new JLabel("탐지 실패: " + failedDetections);
@@ -370,10 +359,6 @@ public class SafeZoneClient extends JFrame {
         JLabel totalPlayTimeLabel = new JLabel("총 플레이 시간: " + formatPlayTime(totalPlayTime));
 
         // 라벨을 프레임에 추가
-        resultFrame.add(totalGamesLabel);
-        resultFrame.add(winLabel);
-        resultFrame.add(lossLabel);
-        resultFrame.add(winRateLabel);
         resultFrame.add(totalDetectionsLabel);
         resultFrame.add(successfulDetectionsLabel);
         resultFrame.add(failedDetectionsLabel);
@@ -389,29 +374,6 @@ public class SafeZoneClient extends JFrame {
         int seconds = totalSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
-    
-//    private void resultGUI() {
-//        JFrame resultFrame = new JFrame("통계");
-//        resultFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-//        resultFrame.setSize(300, 160);
-//        resultFrame.setLocationRelativeTo(null);
-//        resultFrame.setResizable(false);
-//
-////        > 게임 수
-////        > 승리, 패배, 승률
-////        > 탐지, 탐지성공, 탐지실패, 탐지확률
-////        > 총 플레이 시간
-//        
-//        resultFrame.setVisible(true);
-//    }
-    
-//    JLabel resultLabel = new JLabel("");
-//    resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-//    resultLabel.setVerticalAlignment(SwingConstants.CENTER);
-//    resultFrame.add(resultLabel, BorderLayout.CENTER);
-    
-    //
-    // >>>내부 기능
     
     // 턴 변경
     private void switchTurn(boolean isMyTurn) {
@@ -484,29 +446,13 @@ public class SafeZoneClient extends JFrame {
                 handleGameStarted();
             } else if (line.startsWith("GAME_OVER")) {
                 handleGameOver(line);
-            } else if (line.startsWith("RESTART_GAME")) {
-                handleRestartGame();
-            } else if (line.startsWith("START_TIMER")) {
-                startTimer();
-            } else if (line.startsWith("상대의 선택을 기다리고 있습니다.")) {
-                showWaitingDialog();
             } else if (line.startsWith("CHAT:")) {
-                // 채팅 메시지 처리
-            } else if (line.startsWith("ROUND+")) {
-                num_round++;
-                roundLabel.setText(num_round + "ROUND");
-            } else if (line.startsWith("MINE-")) {
-                num_mine--;
-                mineField.setText("" + num_mine);
-            } else if (line.startsWith("UPDATE_MINES")) {
-                int remainingMines = Integer.parseInt(line.split(" ")[1]);
-                num_mine = remainingMines;
-                mineField.setText("" + num_mine);
-            } else if (line.startsWith("GAME_OVER_FINAL")) {
-                hideWaitingDialog();
-                JOptionPane.showMessageDialog(this, "상대가 접속을 종료하였습니다.");
-                JOptionPane.showMessageDialog(this, "플레이 해주셔서 감사합니다.");
-                System.exit(0);
+                String chatMessage = line.substring(5); // "CHAT:" 다음 부분만 추출
+                textArea.append(chatMessage + "\n");
+            } else if (line.startsWith("GAME_END")) {
+                handleGameEnd();
+            } else if (line.startsWith("THANK_YOU")) {
+                handleThankYou();
             }
         });
     }
@@ -519,12 +465,11 @@ public class SafeZoneClient extends JFrame {
         gameGUI();
     }
 
+    private JDialog waitingDialog;
+
     private void handleGameStarted() {
         creatMapButtons();
         startTimer();
-        num_round++;
-        roundLabel.setText(num_round + "ROUND");
-        num_mine = 10;
         mineField.setText("" + num_mine);
         num_try = 0;
         tryField.setText("" + num_try);
@@ -536,56 +481,80 @@ public class SafeZoneClient extends JFrame {
         sendMessage(startText);
         switchTurn(false);
     }
-    
+
     private void handleGameOver(String line) {
-        String[] parts = line.split(" ");
         String message;
-        if (parts.length >= 2) {
-            String winnerName = parts[1];
-            message = "게임 종료! (승자: " + winnerName + ")\n다시 하시겠습니까?";
+        if (line.contains("No Winner")) {
+            message = "게임 종료! 무승부입니다.";
         } else {
-            message = "게임 종료!\n다시 하시겠습니까?";
+            String[] parts = line.split(" ");
+            if (parts.length >= 2) {
+                String winnerName = parts[1];
+                message = "게임 종료! 승자: " + winnerName;
+            } else {
+                message = "게임 종료!";
+            }
         }
-        int response = JOptionPane.showConfirmDialog(this, message, "게임 종료", JOptionPane.YES_NO_OPTION);
-        if (response == JOptionPane.YES_OPTION) {
-            out.println("RESTART_GAME");
-            showWaitingDialog();
-        } else {
-            out.println("NO_RESTART");
-            showWaitingDialog();
-        }
+
+        // 기존 게임 창 닫기
+        dispose();
+
+        // 종료 안내 메시지 띄우기
+        JOptionPane.showMessageDialog(
+                null,
+                message + "\n플레이해주셔서 감사합니다.",
+                "게임 종료",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+
+        // 프로그램 종료
+        System.exit(0);
     }
 
-    private JDialog waitingDialog;
+    private void showWaitingForServerStart() {
+        JFrame waitingForStartFrame = new JFrame("게임 시작 대기");
+        waitingForStartFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        waitingForStartFrame.setSize(300, 160);
+        waitingForStartFrame.setLocationRelativeTo(null);
+        waitingForStartFrame.setResizable(false);
 
-    private void showWaitingDialog() {
-        if (waitingDialog == null) {
-            waitingDialog = new JDialog(this, "상대의 선택을 기다리고 있습니다.", true);
-            waitingDialog.setSize(300, 150);
-            waitingDialog.setLocationRelativeTo(this);
-        }
-        SwingUtilities.invokeLater(() -> waitingDialog.setVisible(true));
-    }
+        JLabel waitingLabel = new JLabel("서버의 게임 시작을 기다리는 중...");
+        waitingLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        waitingLabel.setVerticalAlignment(SwingConstants.CENTER);
+        waitingForStartFrame.add(waitingLabel, BorderLayout.CENTER);
 
-    private void hideWaitingDialog() {
-        if (waitingDialog != null) {
-            waitingDialog.setVisible(false);
-        }
+        waitingForStartFrame.setVisible(true);
     }
 
     private void handleRestartGame() {
-        hideWaitingDialog();
-        creatMapButtons();
-        startTimer();
-        num_round++;
-        roundLabel.setText(num_round + "ROUND");
-        num_mine = 10;
-        mineField.setText("" + num_mine);
-        String startText = "게임이 다시 시작되었습니다!";
-        sendMessage(startText);
-        startText = "맵의 지뢰는 총 10개 입니다.";
-        sendMessage(startText);
-        switchTurn(false);
+        SwingUtilities.invokeLater(() -> {
+            // 기존 게임 창 닫기
+            dispose();
+            showWaitingForServerStart(); // 서버의 게임 시작 호출을 기다리는 상태로 전환
+        });
+    }
+
+    private void handleGameEnd() {
+        SwingUtilities.invokeLater(() -> {
+            // 선택지 창이 열려 있는 경우 닫기
+            Window[] windows = Window.getWindows();
+            for (Window window : windows) {
+                if (window instanceof JDialog) {
+                    window.dispose();
+                }
+            }
+
+            JOptionPane.showMessageDialog(null, "상대방이 게임을 종료하였습니다. 플레이 해주셔서 감사합니다.");
+            System.exit(0);
+        });
+    }
+    
+    // 종료 인사
+    private void handleThankYou() {
+        SwingUtilities.invokeLater(() -> {
+            JOptionPane.showMessageDialog(null, "플레이해주셔서 감사합니다. 안녕히가세요.");
+            System.exit(0);
+        });
     }
     
     // 타이머 가동
@@ -628,12 +597,19 @@ public class SafeZoneClient extends JFrame {
     	for (JButton button : mapButtons) {
     		button.setEnabled(false);
     	}
-    }
+	}
 
-    // 채팅창 업데이트
-    private void sendMessage(String message) {
-        playerStatus.append(message + "\n");
-        chatField.setText("");
+	// 채팅창 업데이트
+	private void sendMessage(String message) {
+		textArea.append(message + "\n");
+		chatField.setText("");
+    }
+	
+	private void sendChatToServer(String chat) {
+        if (!chat.trim().isEmpty()) {
+            out.println("CHAT:" + userName + ": " + chat);
+            chatField.setText(""); // 채팅 입력 필드 비우기
+        }
     }
     
     // 클릭 전송
