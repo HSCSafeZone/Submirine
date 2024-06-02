@@ -9,6 +9,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.time.Duration;
 import java.time.Instant;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.PrintWriter;
 
 public class SafeZoneServer extends JFrame {
     public static final int IN_PORT = 9999;
@@ -39,6 +42,62 @@ public class SafeZoneServer extends JFrame {
         }
     }
 
+    public class ChatProgram extends JPanel {
+        private JTextArea chatArea;
+        private JTextField chatField;
+        private JButton sendButton;
+        private PrintWriter out;
+
+        public ChatProgram(PrintWriter out) {
+            this.out = out;
+            initialize();
+        }
+
+        private void initialize() {
+            setLayout(new BorderLayout());
+
+            chatArea = new JTextArea();
+            chatArea.setEditable(false);
+            chatArea.setBackground(new Color(200, 200, 200));
+            chatArea.setForeground(new Color(0, 0, 0));
+            JScrollPane scrollPane = new JScrollPane(chatArea);
+            scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+
+            chatField = new JTextField();
+            chatField.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    sendMessage();
+                }
+            });
+
+            sendButton = new JButton("보내기");
+            sendButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    sendMessage();
+                }
+            });
+
+            JPanel bottomPanel = new JPanel(new BorderLayout());
+            bottomPanel.add(chatField, BorderLayout.CENTER);
+            bottomPanel.add(sendButton, BorderLayout.EAST);
+
+            add(scrollPane, BorderLayout.CENTER);
+            add(bottomPanel, BorderLayout.SOUTH);
+        }
+
+        private void sendMessage() {
+            String message = chatField.getText().trim();
+            if (!message.isEmpty()) {
+                out.println("CHAT:" + message);
+                chatField.setText("");
+            }
+        }
+
+        public void addMessage(String message) {
+            chatArea.append(message + "\n");
+        }
+    }
+
     private void prepareGUI() {
         setTitle("지뢰 찾기 서버");
         setSize(800, 600);
@@ -48,8 +107,8 @@ public class SafeZoneServer extends JFrame {
 
         Font infoFont = new Font("SansSerif", Font.BOLD, 14);
 
-        player1Info = createTextArea("플레이어 1", infoFont, new Color(0, 0, 0));
-        player2Info = createTextArea("플레이어 2", infoFont, new Color(0, 0, 0));
+        player1Info = createTextArea("플레이어 1: 대기 중", infoFont, new Color(0, 0, 0));
+        player2Info = createTextArea("플레이어 2: 대기 중", infoFont, new Color(0, 0, 0));
         statusLabel = createLabel("서버가 시작되었습니다...", new Font("Serif", Font.BOLD, 16), new Color(0, 0, 0));
 
         mapPanel = new JPanel(new GridLayout(MAP_WIDTH, MAP_HEIGHT));
@@ -130,9 +189,8 @@ public class SafeZoneServer extends JFrame {
                     synchronized (clients) {
                         clients.add(client);
                         updateServerConsole(client.getPlayer().getName() + "님이 연결되었습니다.");
-                        if (clients.size() == MAX_PLAYER) {
-                            checkPlayersAndStartGame();
-                        }
+                        updatePlayerInfo(); // 여기서 호출
+                        checkPlayersAndStartGame(); // 클라이언트 연결 시 버튼 상태 업데이트
                     }
                     pool.execute(client);
                 } catch (IOException e) {
@@ -157,7 +215,7 @@ public class SafeZoneServer extends JFrame {
             serverConsole.append(message + "\n");
         });
     }
-    
+
     private void closeServerAsync() {
         new Thread(() -> {
             try {
@@ -206,7 +264,11 @@ public class SafeZoneServer extends JFrame {
                 }
                 SwingUtilities.invokeLater(() -> {
                     statusLabel.setText("모든 플레이어가 연결되었습니다. 게임을 시작하세요.");
-                    startButton.setEnabled(true);
+                    startButton.setEnabled(true); // 두 명이 연결된 경우 버튼 활성화
+                });
+            } else {
+                SwingUtilities.invokeLater(() -> {
+                    startButton.setEnabled(false); // 두 명이 연결되지 않은 경우 버튼 비활성화
                 });
             }
         }
@@ -279,6 +341,17 @@ public class SafeZoneServer extends JFrame {
         }
     }
 
+    private void updatePlayerInfo() {
+        SwingUtilities.invokeLater(() -> {
+            if (clients.size() > 0) {
+                player1Info.setText("플레이어 1: " + clients.get(0).getPlayer().getName());
+            }
+            if (clients.size() > 1) {
+                player2Info.setText("플레이어 2: " + clients.get(1).getPlayer().getName());
+            }
+        });
+    }
+
     public static void main(String[] args) {
         new SafeZoneServer();
     }
@@ -325,7 +398,21 @@ public class SafeZoneServer extends JFrame {
             }
         }
 
-        
+        public void closeConnection() {
+            try {
+                if (socket != null) {
+                    socket.close();  // 소켓 연결 종료
+                }
+                synchronized (clients) {
+                    clients.remove(this);
+                    updatePlayerInfo();
+                    checkPlayersAndStartGame(); // 클라이언트 연결 종료 시 버튼 상태 업데이트
+                }
+            } catch (IOException e) {
+                System.err.println("연결 종료 오류: " + e.getMessage());
+            }
+        }
+
         public void sendMessage(String message) {
             out.println(message);
         }
@@ -333,19 +420,89 @@ public class SafeZoneServer extends JFrame {
         private void processMessage(String msg) {
             if (msg.startsWith("MOVE")) {
                 processMoveMessage(msg);
-            } else if (msg.equals("RESTART")) {
-                this.wantsToRestart = true;
-                out.println("상대의 선택을 기다리고 있습니다.");
-                checkAllPlayersRestartConsent();
-            } else if (msg.equals("NO_RESTART")) {
-                this.wantsToRestart = false;
-                checkAllPlayersRestartConsent();
             } else if ("GET_INFO".equals(msg)) {
                 sendPlayerInfo();
             } else if ("SHUTDOWN".equals(msg)) {
                 closeConnection();
+            } else if ("RESTART".equals(msg)) {
+                wantsToRestart = true;
+                handleRestartRequest();
+            } else if ("END".equals(msg)) {
+                wantsToRestart = false;
+                handleEndRequest(this);
             } else {
                 handleOtherMessages(msg);
+            }
+        }
+
+        private void handleRestartRequest() {
+            synchronized (clients) {
+                boolean allWantRestart = true;
+                for (Client client : clients) {
+                    if (client.wantsToRestart == null) {
+                        allWantRestart = false;
+                        break;
+                    }
+                }
+
+                if (allWantRestart) {
+                    for (Client client : clients) {
+                        client.wantsToRestart = null; // 재설정
+                        client.sendMessage("RESTART_MATCH");
+                    }
+                    initGame(); // 게임 초기화
+                }
+            }
+        }
+
+        private void handleEndRequest(Client requestingClient) {
+            synchronized (clients) {
+                // 요청한 클라이언트 처리
+                requestingClient.sendMessage("THANK_YOU");
+                requestingClient.closeConnection();
+
+                // 나머지 클라이언트에게 GAME_END 메시지를 보냄
+                for (Client client : clients) {
+                    if (client != requestingClient) {
+                        client.sendMessage("GAME_END");
+                        client.closeConnection();
+                    }
+                }
+
+                closeServerAsync();
+            }
+        }
+
+        private void notifyRemainingPlayers() {
+            for (Client client : clients) {
+                if (client.wantsToRestart != null && client.wantsToRestart) {
+                    client.sendMessage("WAITING_FOR_OPPONENT");
+                } else if (!client.wantsToRestart) {
+                    client.sendMessage("OPPONENT_LEFT");
+                }
+            }
+        }
+
+        private void resetGame() {
+            clearMap();
+            Random rand = new Random();
+            for (int i = 0; i < NUM_MINES; i++) {
+                int x, y;
+                do {
+                    x = rand.nextInt(MAP_WIDTH);
+                    y = rand.nextInt(MAP_HEIGHT);
+                } while (mines[x][y]);
+                mines[x][y] = true;
+            }
+            updateMap();
+            notifyClientsGameStarted();
+            assignFirstTurn();
+        }
+
+        private void notifyClientsGameStarted() {
+            for (Client client : clients) {
+                client.wantsToRestart = null; // 초기화
+                client.sendMessage("RESTART_GAME");
             }
         }
 
@@ -357,7 +514,7 @@ public class SafeZoneServer extends JFrame {
                 score++;
                 mines[x][y] = false; // 지뢰 찾았으니 false로 설정
                 int remainingMines = getRemainingMines();
-                out.println("MOVE_OK" + " " + score + " " + remainingMines + " " + x + " " + y);
+                out.println("MOVE_OK " + score + " " + remainingMines + " " + x + " " + y);
                 broadcastRemainingMines(remainingMines);
                 // 게임이 끝났는지 확인
                 if (checkGameOver()) {
@@ -365,7 +522,7 @@ public class SafeZoneServer extends JFrame {
                 }
             } else {
                 int remainingMines = getRemainingMines();
-                out.println("MOVE_FAIL" + " " + score + " " + remainingMines + " " + x + " " + y);
+                out.println("MOVE_FAIL " + score + " " + remainingMines + " " + x + " " + y);
                 broadcastRemainingMines(remainingMines);
             }
             updateMap();
@@ -390,58 +547,24 @@ public class SafeZoneServer extends JFrame {
             return remainingMines;
         }
 
-
         private void handleOtherMessages(String msg) {
             String consoleMsg = player.getName() + ": " + msg;
             System.out.println(consoleMsg);
             SwingUtilities.invokeLater(() -> {
                 serverConsole.append(consoleMsg + "\n");
             });
+            // 채팅 메시지를 모든 클라이언트에게 브로드캐스트
+            if (msg.startsWith("CHAT:")) {
+                broadcastMessage(msg);
+            }
         }
-        
-        private void checkAllPlayersRestartConsent() {
+
+        private void broadcastMessage(String msg) {
             synchronized (clients) {
-                boolean allResponded = true;
                 for (Client client : clients) {
-                    if (client.wantsToRestart == null) {
-                        allResponded = false;
-                        break;
-                    }
-                }
-
-                if (allResponded) {
-                    boolean allWantRestart = true;
-                    for (Client client : clients) {
-                        if (!client.wantsToRestart) {
-                            allWantRestart = false;
-                            break;
-                        }
-                    }
-
-                    if (allWantRestart) {
-                        restartGame();
-                    } else {
-                        notifyClientsGameOver();
-                    }
+                    client.sendMessage(msg);
                 }
             }
-        }
-
-        private void restartGame() {
-            for (Client client : clients) {
-                client.wantsToRestart = null; // 재설정
-                client.out.println("RESTART_GAME");
-            }
-            initGame(); // 게임 초기화
-        }
-        
-        private void notifyClientsGameOver() {
-            for (Client client : clients) {
-                client.out.println("GAME_OVER_FINAL");
-                client.out.println("상대가 접속을 종료하였습니다.");
-                client.out.println("플레이 해주셔서 감사합니다.");
-            }
-            closeServerAsync(); // 서버 종료를 비동기로 실행
         }
 
         private boolean checkGameOver() {
@@ -455,24 +578,52 @@ public class SafeZoneServer extends JFrame {
         private void sendGameOver() {
             String winnerName = "";
             int maxScore = -1;
+            boolean isDraw = false;
+
             for (Client client : clients) {
                 if (client.score > maxScore) {
                     maxScore = client.score;
                     winnerName = client.player.getName();
+                    isDraw = false;  // 새로운 최고 점수가 나오면 무승부 아님
+                } else if (client.score == maxScore) {
+                    isDraw = true;  // 동일한 최고 점수가 나오면 무승부
                 }
             }
-            if (winnerName.isEmpty()) {
+
+            if (isDraw || maxScore == 0) {
                 winnerName = "No Winner";
             }
+
             for (Client client : clients) {
-                client.out.println("GAME_OVER " + winnerName);
+                client.sendMessage("GAME_OVER " + winnerName);
+            }
+
+            // 클라이언트들이 메시지를 받을 시간을 준 후 연결을 끊음
+            new Thread(() -> {
+                try {
+                    Thread.sleep(3000); // 3초 대기
+                    closeAllClients();
+                    closeServerAsync(); // 게임 종료 후 서버 종료
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }).start();
+        }
+
+        private void closeAllClients() {
+            Vector<Client> clientsCopy;
+            synchronized (clients) {
+                clientsCopy = new Vector<>(clients);
+            }
+            for (Client client : clientsCopy) {
+                client.closeConnection();
             }
         }
 
         public void sendPlayerInfo() {
             out.println(player.getInfo());  // 플레이어 정보 전송
         }
-        
+
         public void sendShutdownMessage() {
             try {
                 if (out != null) {
@@ -500,16 +651,6 @@ public class SafeZoneServer extends JFrame {
                 }
             } catch (Exception e) {
                 System.err.println("Turn 메시지 전송 중 오류 발생: " + e.getMessage());
-            }
-        }
-
-        private void closeConnection() {
-            try {
-                if (socket != null) {
-                    socket.close();  // 소켓 연결 종료
-                }
-            } catch (IOException e) {
-                System.err.println("연결 종료 오류: " + e.getMessage());
             }
         }
 
