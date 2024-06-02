@@ -385,13 +385,15 @@ public class SafeZoneClient extends JFrame {
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
     
-    // 턴 변경
+ // 턴 변경
     private void switchTurn(boolean isMyTurn) {
         this.isMyTurn = isMyTurn;
         SwingUtilities.invokeLater(() -> {
             for (int i = 0; i < MAP_SIZE; i++) {
                 for (int j = 0; j < MAP_SIZE; j++) {
-                    buttons[i][j].setEnabled(isMyTurn);
+                    if (buttons[i][j].getText().isEmpty()) {
+                        buttons[i][j].setEnabled(isMyTurn);
+                    }
                 }
             }
             // 추후에 채팅 해결되면 서버와 연결
@@ -399,50 +401,55 @@ public class SafeZoneClient extends JFrame {
             sendMessage(turnText);
         });
     }
-    
-    // 기본 플레이어 맵 클릭
+
+ // 기본 플레이어 맵 클릭
     class Detect implements ActionListener {
-    	public void actionPerformed(ActionEvent e) {
-    		if (!isMyTurn) return; // 내 턴이 아니면 클릭 무시
-    		
-    		JButton b = (JButton) e.getSource();
-    		String[] coordinates = b.getActionCommand().split(",");
+        public void actionPerformed(ActionEvent e) {
+            if (!isMyTurn) return; // 내 턴이 아니면 클릭 무시
+            
+            JButton b = (JButton) e.getSource();
+            if (!b.isEnabled()) return; // 이미 눌린 버튼이면 무시
+            
+            b.setEnabled(false); // 버튼을 비활성화하여 중복 클릭 방지
+
+            String[] coordinates = b.getActionCommand().split(",");
             int x = Integer.parseInt(coordinates[0]);
             int y = Integer.parseInt(coordinates[1]);
             sendClick(x, y);
-    	}
+        }
     }
-    
-    // 플레이어 맵 클릭 추가 서버 관리
+
+ // 플레이어 맵 클릭 추가 서버 관리
     private void handleMoveResponse(String line) {
         String[] parts = line.split(" ");
         int score = Integer.parseInt(parts[1]);
         int remainingMines = Integer.parseInt(parts[2]);
         int x = Integer.parseInt(parts[3]);
         int y = Integer.parseInt(parts[4]);
+        JButton button = buttons[x][y];
         if (parts[0].equals("MOVE_OK")) {
-        	SwingUtilities.invokeLater(() -> new GotchaAnimation());
+            SwingUtilities.invokeLater(() -> new GotchaAnimation());
             String OText = ("지뢰를 찾았습니다! (점수 +1)\n");
             sendMessage(OText);
             num_point++;
             scoreField.setText("" + num_point);
-            buttons[x][y].setText("🚩");
-    		buttons[x][y].setBackground(new Color(239, 35, 60));
+            button.setText("🚩");
+            button.setBackground(new Color(239, 35, 60));
         } else {
-        	String XText = ("지뢰가 아닙니다.\n");
+            String XText = ("지뢰가 아닙니다.\n");
             sendMessage(XText);
-            buttons[x][y].setText("❌");
-            buttons[x][y].setBackground(new Color(104, 163, 87));
+            button.setText("❌");
+            button.setBackground(new Color(104, 163, 87));
         }
-        buttons[x][y].setEnabled(false);
-        // 본인이 선택한 버튼은 영구 비할성화 추가.
+        button.setEnabled(false); // 응답 후 버튼을 비활성화
+
         num_mine = remainingMines;
         mineField.setText("" + num_mine);
         num_try++;
         tryField.setText("" + num_try);
-        switchTurn(false);
+        switchTurn(false); // 응답 후 턴 전환
     }
-    
+
     // 서버 메시지 일괄 관리 (기능 아래에 계속 추가)
     private void handleServerMessage(String line) {
         SwingUtilities.invokeLater(() -> {
