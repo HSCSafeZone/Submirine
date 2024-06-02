@@ -9,6 +9,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.time.Duration;
 import java.time.Instant;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.PrintWriter;
 
 public class SafeZoneServer extends JFrame {
     public static final int IN_PORT = 9999;
@@ -36,6 +39,62 @@ public class SafeZoneServer extends JFrame {
         } catch (IOException e) {
             JOptionPane.showMessageDialog(null, "서버가 이미 실행 중입니다.", "경고", JOptionPane.WARNING_MESSAGE);
             System.exit(0);
+        }
+    }
+
+    public class ChatProgram extends JPanel {
+        private JTextArea chatArea;
+        private JTextField chatField;
+        private JButton sendButton;
+        private PrintWriter out;
+
+        public ChatProgram(PrintWriter out) {
+            this.out = out;
+            initialize();
+        }
+
+        private void initialize() {
+            setLayout(new BorderLayout());
+
+            chatArea = new JTextArea();
+            chatArea.setEditable(false);
+            chatArea.setBackground(new Color(200, 200, 200));
+            chatArea.setForeground(new Color(0, 0, 0));
+            JScrollPane scrollPane = new JScrollPane(chatArea);
+            scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+
+            chatField = new JTextField();
+            chatField.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    sendMessage();
+                }
+            });
+
+            sendButton = new JButton("보내기");
+            sendButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    sendMessage();
+                }
+            });
+
+            JPanel bottomPanel = new JPanel(new BorderLayout());
+            bottomPanel.add(chatField, BorderLayout.CENTER);
+            bottomPanel.add(sendButton, BorderLayout.EAST);
+
+            add(scrollPane, BorderLayout.CENTER);
+            add(bottomPanel, BorderLayout.SOUTH);
+        }
+
+        private void sendMessage() {
+            String message = chatField.getText().trim();
+            if (!message.isEmpty()) {
+                out.println("CHAT:" + message);
+                chatField.setText("");
+            }
+        }
+
+        public void addMessage(String message) {
+            chatArea.append(message + "\n");
         }
     }
 
@@ -93,7 +152,6 @@ public class SafeZoneServer extends JFrame {
 
         setVisible(true);
     }
-
 
     private JTextArea createTextArea(String text, Font font, Color color) {
         JTextArea textArea = new JTextArea(text);
@@ -157,7 +215,7 @@ public class SafeZoneServer extends JFrame {
             serverConsole.append(message + "\n");
         });
     }
-    
+
     private void closeServerAsync() {
         new Thread(() -> {
             try {
@@ -282,7 +340,7 @@ public class SafeZoneServer extends JFrame {
             label.setText(mines[x][y] ? "X" : "");
         }
     }
-    
+
     private void updatePlayerInfo() {
         SwingUtilities.invokeLater(() -> {
             if (clients.size() > 0) {
@@ -293,7 +351,6 @@ public class SafeZoneServer extends JFrame {
             }
         });
     }
-
 
     public static void main(String[] args) {
         new SafeZoneServer();
@@ -403,7 +460,7 @@ public class SafeZoneServer extends JFrame {
                 // 요청한 클라이언트 처리
                 requestingClient.sendMessage("THANK_YOU");
                 requestingClient.closeConnection();
-                
+
                 // 나머지 클라이언트에게 GAME_END 메시지를 보냄
                 for (Client client : clients) {
                     if (client != requestingClient) {
@@ -490,15 +547,26 @@ public class SafeZoneServer extends JFrame {
             return remainingMines;
         }
 
-
         private void handleOtherMessages(String msg) {
             String consoleMsg = player.getName() + ": " + msg;
             System.out.println(consoleMsg);
             SwingUtilities.invokeLater(() -> {
                 serverConsole.append(consoleMsg + "\n");
             });
+            // 채팅 메시지를 모든 클라이언트에게 브로드캐스트
+            if (msg.startsWith("CHAT:")) {
+                broadcastMessage(msg);
+            }
         }
-        
+
+        private void broadcastMessage(String msg) {
+            synchronized (clients) {
+                for (Client client : clients) {
+                    client.sendMessage(msg);
+                }
+            }
+        }
+
         private boolean checkGameOver() {
             int totalMinesFound = 0;
             for (Client client : clients) {
@@ -550,7 +618,7 @@ public class SafeZoneServer extends JFrame {
         public void sendPlayerInfo() {
             out.println(player.getInfo());  // 플레이어 정보 전송
         }
-        
+
         public void sendShutdownMessage() {
             try {
                 if (out != null) {
