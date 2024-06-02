@@ -262,7 +262,7 @@ public class SafeZoneClient extends JFrame {
 
         createMapPanel();
 
-        createBottomPanel();
+        createChatPanel();
 
         setVisible(true);
     }
@@ -299,8 +299,10 @@ public class SafeZoneClient extends JFrame {
     }
 
     // 게임GUI 하단(채팅창)
-    private void createBottomPanel() {
-        JPanel bottomPanel = new JPanel(new BorderLayout());
+    private void createChatPanel() {
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS));
+    	JPanel chatPanel = new JPanel(new BorderLayout());
 
         // 채팅창
         textArea = new JTextArea(8, 60);
@@ -322,9 +324,12 @@ public class SafeZoneClient extends JFrame {
                 sendChatToServer(chat);
             }
         });
-
-        bottomPanel.add(statusScrollPane, BorderLayout.NORTH);
-        bottomPanel.add(chatField, BorderLayout.SOUTH);
+                
+        chatPanel.add(statusScrollPane, BorderLayout.NORTH);
+        chatPanel.add(chatField, BorderLayout.SOUTH);
+        
+        bottomPanel.add(chatPanel);
+        bottomPanel.add(Box.createVerticalStrut(5));
 
         cont.add(bottomPanel, BorderLayout.SOUTH);
     }
