@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
 import java.net.Socket;
+import java.text.DecimalFormat;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -33,6 +34,7 @@ public class SafeZoneClient extends JFrame {
     
     public SafeZoneClient() {
         connectGUI();
+//    	gameGUI();
     }
 
     private void connectGUI() {
@@ -179,7 +181,7 @@ public class SafeZoneClient extends JFrame {
 
         topPanel = new JPanel();
         topPanel.setLayout(new GridLayout(2, 1));
-        topPanel.setBackground(new Color(60, 145, 230));
+        topPanel.setBackground(new Color(141, 153, 174));
 
         roundLabel = new JLabel(num_round + "ROUND", SwingConstants.RIGHT);
         roundLabel.setFont(roundLabel.getFont().deriveFont(Font.BOLD));
@@ -201,27 +203,32 @@ public class SafeZoneClient extends JFrame {
         setupButton.addActionListener(e -> {
             setupMenu.show(setupButton, 0, setupButton.getHeight());
         });
-        setupButton.setBackground(new Color(60, 145, 230));
+        setupButton.setBackground(new Color(141, 153, 174));
         setupButton.setForeground(Color.WHITE);
         setupMenu = new JPopupMenu();
 
-        JMenuItem First_option = new JMenuItem("항복하기");
+        JMenuItem First_option = new JMenuItem("통계보기");
         setupMenu.add(First_option);
         First_option.addActionListener(e -> {
-        	int response = JOptionPane.showConfirmDialog(null, "항복하고 다시 시작하시겠습니까?(패배 처리됨)", "다시 시작", JOptionPane.YES_NO_OPTION);
+        	resultGUI();
+        });
+
+        JMenuItem Second_option = new JMenuItem("항복하기");
+        setupMenu.add(Second_option);
+        Second_option.addActionListener(e -> {
+        	int response = JOptionPane.showConfirmDialog(null, "항복하고 다시 시작하시겠습니까?\n(패배 처리됨)", "다시 시작", JOptionPane.YES_NO_OPTION);
         	if (response == JOptionPane.YES_OPTION) {
-        		out.println("RESTART");
-                showWaitingDialog();
+        		showWaitingDialog();
+        		handleRestartGame();
         	}
         });
 
         JMenuItem Third_option = new JMenuItem("게임종료");
         setupMenu.add(Third_option);
         Third_option.addActionListener(e -> {
-            int response = JOptionPane.showConfirmDialog(null, "게임을 종료하시겠습니까?(패배 처리됨)", "게임 종료", JOptionPane.YES_NO_OPTION);
+            int response = JOptionPane.showConfirmDialog(null, "게임을 종료하시겠습니까?\n(패배 처리됨)", "게임 종료", JOptionPane.YES_NO_OPTION);
             if (response == JOptionPane.YES_OPTION) {
-            	out.println("NO_RESTART");
-                showWaitingDialog();
+            	getExtendedState();
             }
         });
 
@@ -248,7 +255,7 @@ public class SafeZoneClient extends JFrame {
         cont.add(topPanel, BorderLayout.NORTH);
         
         gamePanel = new JPanel();
-        gamePanel.setBackground(new Color(60, 145, 230));
+        gamePanel.setBackground(new Color(141, 153, 174));
         cont.add(gamePanel, BorderLayout.CENTER);
 
         createMapPanel();
@@ -264,7 +271,7 @@ public class SafeZoneClient extends JFrame {
     	
         JPanel wrappedPanel = new JPanel(new BorderLayout());
         wrappedPanel.add(mapPanel, BorderLayout.CENTER);
-        Border border = BorderFactory.createLineBorder(new Color(250, 255, 253), 50);
+        Border border = BorderFactory.createLineBorder(new Color(237, 242, 244), 50);
         wrappedPanel.setBorder(border);
         
         JPanel infoPanel2 = new JPanel(new GridLayout(1, 3));
@@ -300,7 +307,7 @@ public class SafeZoneClient extends JFrame {
                 button.setActionCommand(i + "," + j);
                 button.addActionListener(new Detect());
                 buttons[i][j] = button;
-                button.setBackground(new Color(162, 215, 41));
+                button.setBackground(new Color(255, 250, 230));
                 mapPanel.add(button);
             }
         }
@@ -337,26 +344,71 @@ public class SafeZoneClient extends JFrame {
         cont.add(bottomPanel, BorderLayout.SOUTH);
     }
     
-    private void resultGUI() {
+    public void resultGUI() {
+    	int wins = 0, totalGames = 0, successfulDetections = 0, totalDetections = 0, losses = 0, failedDetections = 0, totalPlayTime = 0;
         JFrame resultFrame = new JFrame("통계");
         resultFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         resultFrame.setSize(300, 160);
         resultFrame.setLocationRelativeTo(null);
         resultFrame.setResizable(false);
+        resultFrame.setLayout(new GridLayout(0, 1)); // 라벨을 수직으로 배치
 
-        JLabel resultLabel = new JLabel(" ~ 결과 내용 ~");
-        resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        resultLabel.setVerticalAlignment(SwingConstants.CENTER);
-        resultFrame.add(resultLabel, BorderLayout.CENTER);
-        // 플레이 시간
-        // 승,패
-        // 시도횟수
-        // 탐지한 지뢰 수
-        // 성공 확률
-        // 등등 보여주고 싶은 데이터
-        
+        // 승률 및 탐지 확률 계산
+        double winRate = (double) wins / totalGames * 100;
+        double detectionRate = (double) successfulDetections / totalDetections * 100;
+        DecimalFormat df = new DecimalFormat("0.00"); // 소수점 2자리 형식
+
+        // 라벨 생성
+        JLabel totalGamesLabel = new JLabel("게임 수: " + totalGames);
+        JLabel winLabel = new JLabel("승리: " + wins);
+        JLabel lossLabel = new JLabel("패배: " + losses);
+        JLabel winRateLabel = new JLabel("승률: " + df.format(winRate) + "%");
+        JLabel totalDetectionsLabel = new JLabel("탐지 시도: " + totalDetections);
+        JLabel successfulDetectionsLabel = new JLabel("탐지 성공: " + successfulDetections);
+        JLabel failedDetectionsLabel = new JLabel("탐지 실패: " + failedDetections);
+        JLabel detectionRateLabel = new JLabel("탐지 확률: " + df.format(detectionRate) + "%");
+        JLabel totalPlayTimeLabel = new JLabel("총 플레이 시간: " + formatPlayTime(totalPlayTime));
+
+        // 라벨을 프레임에 추가
+        resultFrame.add(totalGamesLabel);
+        resultFrame.add(winLabel);
+        resultFrame.add(lossLabel);
+        resultFrame.add(winRateLabel);
+        resultFrame.add(totalDetectionsLabel);
+        resultFrame.add(successfulDetectionsLabel);
+        resultFrame.add(failedDetectionsLabel);
+        resultFrame.add(detectionRateLabel);
+        resultFrame.add(totalPlayTimeLabel);
+
         resultFrame.setVisible(true);
     }
+    
+    private String formatPlayTime(int totalSeconds) {
+        int hours = totalSeconds / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+    
+//    private void resultGUI() {
+//        JFrame resultFrame = new JFrame("통계");
+//        resultFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+//        resultFrame.setSize(300, 160);
+//        resultFrame.setLocationRelativeTo(null);
+//        resultFrame.setResizable(false);
+//
+////        > 게임 수
+////        > 승리, 패배, 승률
+////        > 탐지, 탐지성공, 탐지실패, 탐지확률
+////        > 총 플레이 시간
+//        
+//        resultFrame.setVisible(true);
+//    }
+    
+//    JLabel resultLabel = new JLabel("");
+//    resultLabel.setHorizontalAlignment(SwingConstants.CENTER);
+//    resultLabel.setVerticalAlignment(SwingConstants.CENTER);
+//    resultFrame.add(resultLabel, BorderLayout.CENTER);
     
     //
     // >>>내부 기능
@@ -403,15 +455,15 @@ public class SafeZoneClient extends JFrame {
             num_point++;
             scoreField.setText("" + num_point);
             buttons[x][y].setText("🚩");
-    		buttons[x][y].setBackground(new Color(52, 46, 55));
+    		buttons[x][y].setBackground(new Color(239, 35, 60));
         } else {
         	String XText = ("지뢰가 아닙니다.\n");
             sendMessage(XText);
             buttons[x][y].setText("❌");
-            buttons[x][y].setBackground(new Color(250, 130, 76));
+            buttons[x][y].setBackground(new Color(104, 163, 87));
         }
         buttons[x][y].setEnabled(false);
-        // 본인이 선택한 버튼은 영구 비할성화
+        // 본인이 선택한 버튼은 영구 비할성화 추가.
         num_mine = remainingMines;
         mineField.setText("" + num_mine);
         num_try++;
