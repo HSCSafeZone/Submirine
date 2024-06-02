@@ -8,10 +8,10 @@ import java.awt.image.BufferedImage;
 
 class AnimationPanel extends JPanel implements ActionListener, MouseListener { // MouseListener 추가
     private final int WIDTH = 300;
-    private final int HEIGHT = 200;
+    private final int HEIGHT = 300;
     private final int START_X = 130;
-    private final int START_Y = -10;
-    private final int RESET_Y = 25; // 이미지를 다시 시작할, 도달한 y 위치
+    private final int START_Y = 180;
+    private final int RESET_Y = 0; // 이미지를 다시 시작할, 도달한 y 위치
     private BufferedImage image;
     private Timer timer;
     private double x, y;
@@ -41,7 +41,7 @@ class AnimationPanel extends JPanel implements ActionListener, MouseListener { /
         imgWidth = 150;
         imgHeight = 120;
         
-        timer = new Timer(10, this);
+        timer = new Timer(1, this);
         timer.start();
         
         addMouseListener(this); // MouseListener 추가
@@ -57,10 +57,10 @@ class AnimationPanel extends JPanel implements ActionListener, MouseListener { /
     @Override
     public void actionPerformed(ActionEvent e) {
         x -= 1.0;
-        y += 0.5; // y는 -일수록 높아짐
+        y -= 2.5; // y는 -일수록 높아짐
         imgWidth += 2;
         imgHeight += 2;
-        if (y == RESET_Y) {
+        if (y <= RESET_Y) {
             x = START_X;
             y = START_Y;
             imgWidth = 150;
@@ -91,8 +91,8 @@ class AnimationPanel extends JPanel implements ActionListener, MouseListener { /
 public class GotchaAnimation extends JFrame {
     public GotchaAnimation() {
         add(new AnimationPanel());
-        setTitle("애니메이션 테스트");
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setTitle("Gotcha!");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(400, 300);
         setLocationRelativeTo(null);
         setResizable(false);
